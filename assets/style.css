@@ -207,23 +207,23 @@
       color: #1e1e1e;
     }
 
+    [data-theme="light"] .cm-editor .cm-activeLine {
+      background: transparent;
+    }
+
     [data-theme="light"] .cm-editor .cm-gutters {
       background: #f0f0f0;
       color: #888;
       border-right: 1px solid #ddd;
     }
 
-    [data-theme="light"] .cm-editor .cm-activeLineGutter {
-      background: #e8e8e8;
-    }
-
-    [data-theme="light"] .cm-editor .cm-activeLine {
-      background: #e8e8e8;
-    }
-
     [data-theme="light"] .cm-editor .cm-selectionBackground,
     [data-theme="light"] .cm-editor.cm-focused .cm-selectionBackground {
-      background: #c5d9f2;
+      background: #add6ff !important;
+    }
+
+    [data-theme="light"] .cm-editor .cm-activeLineGutter {
+      background: #e8e8e8;
     }
 
     [data-theme="light"] .cm-editor .cm-cursor {

@@ -367,6 +367,7 @@ window.setSearchMatchHighlight = function (text) {
 };
 
 // Создаём редактор
+// Светлая тема для CodeMirror — И selection, И active line через EditorView.theme()
 let view = new EditorView({
   doc: window.INITIAL_TEXT || "# Новый документ",
   extensions: [
@@ -383,6 +384,9 @@ let view = new EditorView({
   ],
   parent: document.getElementById("editor"),
 });
+
+// Если data-theme не совпадает с темой в config (например, после applyTheme),
+// app.js вызовет setEditorTheme через checkTheme — это надёжно отработает.
 
 // Сразу показываем превью при запуске
 updatePreview();
