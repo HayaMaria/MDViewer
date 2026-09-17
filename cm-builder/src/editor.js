@@ -584,18 +584,86 @@ window.getRenderedBodyHTML = function () {
 };
 // ===== Функции форматирования Markdown (панель инструментов) =====
 
+/**
+ * Оборачивает выделенный текст в маркеры форматирования.
+ * Работает построчно для многострочного выделения.
+ * Если текст уже обёрнут — снимает форматирование (toggle).
+ */
 function wrapSelection(before, after) {
   var sel = view.state.selection.main;
   var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
-  var insert = before + text + after;
-  var anchor = sel.from + before.length;
-  var head = sel.from + insert.length - after.length;
-  view.dispatch({
-    changes: { from: sel.from, to: sel.to, insert: insert },
-    selection: { anchor: anchor, head: text ? head : anchor },
-    scrollIntoView: true,
-    userEvent: 'input.formatting'
-  });
+  if (!text) {
+    var insert = before + after;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: insert },
+      selection: { anchor: sel.from + before.length, head: sel.from + before.length },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+    view.focus();
+    return;
+  }
+
+  // Многострочный режим
+  if (text.indexOf('\n') !== -1) {
+    var lines = text.split('\n');
+    var resultLines = [];
+    var allWrapped = true;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line.length > 0 && line.indexOf(before) === 0 && line.lastIndexOf(after) === line.length - after.length && line.length >= before.length + after.length) {
+        resultLines.push(line.slice(before.length, -after.length));
+      } else if (line.length === 0) {
+        resultLines.push('');
+        allWrapped = false;
+      } else {
+        resultLines.push(before + line + after);
+        allWrapped = false;
+      }
+    }
+    if (allWrapped) {
+      resultLines = [];
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.length >= before.length + after.length) {
+          resultLines.push(line.slice(before.length, -after.length));
+        } else {
+          resultLines.push(line);
+        }
+      }
+    }
+    var insert = resultLines.join('\n');
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: insert },
+      selection: { anchor: sel.from, head: sel.from + insert.length },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+    view.focus();
+    return;
+  }
+
+  // Однострочный
+  var isWrapped = text.indexOf(before) === 0 && text.lastIndexOf(after) === text.length - after.length && text.length >= before.length + after.length;
+  if (isWrapped) {
+    var inner = text.slice(before.length, -after.length);
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: inner },
+      selection: { anchor: sel.from, head: sel.from + inner.length },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+  } else {
+    var insert = before + text + after;
+    var anchor = sel.from + before.length;
+    var head = sel.from + insert.length - after.length;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: insert },
+      selection: { anchor: anchor, head: text ? head : anchor },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+  }
   view.focus();
 }
 
@@ -622,48 +690,60 @@ window.toggleBold = function () { wrapSelection('**', '**'); };
 window.toggleItalic = function () { wrapSelection('*', '*'); };
 window.toggleStrikethrough = function () { wrapSelection('~~', '~~'); };
 window.toggleInlineCode = function () { wrapSelection('`', '`'); };
+/**
+ * Блок кода: оборачивает выделенный текст в ``` и обратно (toggle)
+ */
 window.toggleCodeBlock = function () {
   var sel = view.state.selection.main;
   var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
-  var insert = '```\n' + text + '\n```';
-  var anchor = sel.from + 4;
-  var head = sel.from + insert.length - 4;
-  view.dispatch({
-    changes: { from: sel.from, to: sel.to, insert: insert },
-    selection: { anchor: anchor, head: text ? head : anchor },
-    scrollIntoView: true,
-    userEvent: 'input.formatting'
-  });
+  var trimmed = text.trim();
+  var codeBlockPattern = /^```\n?([\s\S]*)\n?```$/;
+  var match = trimmed.match(codeBlockPattern);
+  if (match) {
+    var inner = match[1];
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: inner },
+      selection: { anchor: sel.from, head: sel.from + inner.length },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+  } else {
+    var innerText = text.trim() || 'текст';
+    var insert = '```\n' + innerText + '\n```';
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: insert },
+      selection: { anchor: sel.from, head: sel.from + insert.length },
+      scrollIntoView: true,
+      userEvent: 'input.formatting'
+    });
+  }
   view.focus();
 };
 
+/**
+ * Заголовок: применяется ко всем выделенным строкам (toggle для каждой)
+ */
 window.toggleHeading = function (level) {
   if (level < 1 || level > 6) level = 1;
   var prefix = new Array(level + 1).join('#') + ' ';
   var sel = view.state.selection.main;
   var doc = view.state.doc;
-  var line = doc.lineAt(sel.from);
-  var text = line.text;
-  var headingMatch = text.match(/^(#{1,6})\s/);
-  if (headingMatch && headingMatch[1].length === level) {
-    view.dispatch({
-      changes: { from: line.from, to: line.from + headingMatch[0].length, insert: '' },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-  } else if (headingMatch) {
-    view.dispatch({
-      changes: { from: line.from, to: line.from + headingMatch[1].length, insert: new Array(level + 1).join('#') },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-  } else {
-    view.dispatch({
-      changes: { from: line.from, insert: prefix },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
+  var fromLine = doc.lineAt(sel.from);
+  var toLine = doc.lineAt(sel.to);
+  var changes = [];
+  for (var l = fromLine.number; l <= toLine.number; l++) {
+    var line = doc.line(l);
+    var text = line.text;
+    var headingMatch = text.match(/^(#{1,6})\s/);
+    if (headingMatch && headingMatch[1].length === level) {
+      changes.push({ from: line.from, to: line.from + headingMatch[0].length, insert: '' });
+    } else if (headingMatch) {
+      changes.push({ from: line.from, to: line.from + headingMatch[1].length, insert: new Array(level + 1).join('#') });
+    } else {
+      changes.push({ from: line.from, insert: prefix });
+    }
   }
+  view.dispatch({ changes: changes, scrollIntoView: true, userEvent: 'input.formatting' });
   view.focus();
 };
 
