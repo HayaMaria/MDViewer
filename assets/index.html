@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+
+<head>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    var INITIAL_TEXT = `# MD Viewer
+
+Добро пожаловать! Это **Markdown-редактор** с *живым превью*.
+
+## Форматирование текста
+
+- **Жирный** — две звёздочки вокруг текста: \`**текст**\`
+- *Курсив* — одна звёздочка вокруг текста: \`*текст*\`
+- \`Код\` — обратные кавычки вокруг текста: \`\` \`код\` \`\`
+- ~~Зачёркнутый~~ — две тильды вокруг текста: \`~~текст~~\`
+
+## Списки
+
+**Маркированный** — минус и пробел перед строкой:
+
+- Пункт первый
+- Пункт второй
+
+**Нумерованный** — цифра, точка и пробел перед строкой:
+
+1. Первый пункт
+2. Второй пункт
+
+## Блок кода
+
+Три обратные кавычки в начале и три в конце. Внутри — код:
+
+\`\`\`
+def hello():
+    print("Привет, мир!")
+\`\`\`
+
+## Цитата
+
+Символ \`>\` и пробел в начале строки:
+
+> Это цитата.
+
+## Таблица
+
+Столбцы разделяются \`|\`, заголовок отделяется дефисами:
+
+| Имя  | Возраст | Город     |
+|------|---------|-----------|
+| Анна | 25      | Москва    |
+
+## Ссылки
+
+В квадратных скобках — текст, на который нажимают (видимая часть ссылки).
+В круглых — куда ведёт ссылка.
+
+**В браузер** — \`[текст](url)\`:
+
+[GitHub](https://github.com)
+
+**В окно приложения** — \`[текст](url+)\` (плюс в конце):
+
+[GitHub](https://github.com+)
+
+## Изображения
+
+В квадратных скобках — подпись (показывается, если картинка не загрузилась; можно оставить пустой).
+В круглых — путь к файлу.
+
+**Локальное** — \`![](img/файл.jpg)\`:
+
+![](img/Kitty.jpg)
+
+**Из интернета** — \`![](https://...)\`:
+
+![](https://i.pinimg.com/originals/a3/03/d6/a303d69ba18fbb210db1afb87706c69e.jpg?nii=t)
+
+---
+
+## Схемы (Mermaid)
+
+Блок \`\`\`mermaid — для рисования схем, графов, блок-схем.
+
+### Как писать
+
+Внутри блока \`\`\`mermaid каждая строка — это связь между элементами.
+
+**Форма элемента задаётся скобками:**
+
+| Скобки | Форма | Пример |
+|--------|-------|-------|
+| \`[ ]\` | прямоугольник | \`A[Текст]\` |
+| \`{ }\` | ромб (условие) | \`B{Вопрос?}\` |
+| \`( )\` | скруглённый | \`C(Конец)\` |
+| \`>]\` | асимметричный | \`D>Вывод]\` |
+| \`[[ ]]\` | подпрограмма | \`E[[Расчёт]]\` |
+
+**Стрелки между ними:**
+
+| Запись | Что значит |
+|--------|-----------|
+| \`A --> B\` | простая стрелка |
+| \`A -- Текст --> B\` | стрелка с подписью |
+| \`A -->\` | Текст | | стрелка с подписью (другой вариант) |
+| \`A -.-> B\` | пунктирная стрелка |
+| \`A ==> B\` | толстая стрелка |
+| \`A --- B\` | линия без стрелки |
+
+**Направление схемы:**
+
+| Команда | Направление |
+|---------|------------|
+| \`graph TD\` | сверху вниз |
+| \`graph LR\` | слева направо |
+| \`graph BT\` | снизу вверх |
+| \`graph RL\` | справа налево |
+
+### Простой пример
+
+\`\`\`mermaid
+graph TD
+    A[Начало] --> B{Есть интернет?}
+    B -->|Да| C[Загрузить страницу]
+    B -->|Нет| D[Показать кэш]
+    C --> E[Готово]
+    D --> E
+\`\`\`
+
+### Слева направо
+
+\`\`\`mermaid
+graph LR
+    A[Идея] --> B[Прототип]
+    B --> C[Разработка]
+    C --> D[Готово]
+\`\`\`
+
+### Сверху вниз с подписями
+
+\`\`\`mermaid
+graph TD
+    A[Пользователь] -- Вводит логин --> B{Проверка}
+    B -- Верно --> C[Впустить]
+    B -- Неверно --> D[Ошибка]
+\`\`\`
+
+### Пунктирные и толстые стрелки
+
+\`\`\`mermaid
+graph LR
+    A[Идея] -.-> B[Черновик]
+    B ==> C[Финальная версия]
+    C --- D[Архив]
+\`\`\`
+
+---
+
+## Диаграммы (графики)
+
+Блок \`\`\`chart — для построения графиков по таблице.
+
+**Типы графиков:**
+- \`type: column\` — столбчатая
+- \`type: line\` — линейная
+- \`type: pie\` — круговая
+- \`type: scatter\` — точечная (3-й столбец — категория)
+- \`type: radar\` — радарная
+
+### Столбчатая диаграмма (Column)
+
+\`\`\`chart
+type: column
+title: Продажи по месяцам
+xlabel: Месяц
+ylabel: Тыс. руб.
+| Месяц | Продажи |
+|-------|---------|
+| Янв   | 120     |
+| Фев   | 200     |
+| Мар   | 80      |
+| Апр   | 150     |
+| Май   | 300     |
+| Июн   | 250     |
+\`\`\`
+
+### Линейная диаграмма (Line)
+
+\`\`\`chart
+type: line
+title: Температура за неделю
+xlabel: День недели
+ylabel: Градусы
+| День | C |
+|------|---|
+| Пн   | 18 |
+| Вт   | 21 |
+| Ср   | 20 |
+| Чт   | 25 |
+| Пт   | 22 |
+| Сб   | 27 |
+| Вс   | 30 |
+\`\`\`
+
+### Круговая диаграмма (Pie)
+
+\`\`\`chart
+type: pie
+title: Бюджет проекта
+| Статья       | Тыс.руб |
+|--------------|---------|
+| Разработка   | 500     |
+| Дизайн       | 200     |
+| Тестирование | 150     |
+| Администрирование | 100 |
+| Прочее       | 50      |
+\`\`\`
+
+### Точечная диаграмма (Scatter)
+
+\`\`\`chart
+type: scatter
+title: Время загрузки vs Пользователи
+xlabel: Пользователи (тыс.)
+ylabel: Время (с)
+| X     | Y    | Категория |
+|-------|------|-----------|
+| 1.5   | 0.8  | Гость     |
+| 2.5   | 1.2  | Гость     |
+| 2.8   | 0.9  | Гость     |
+| 2.8   | 178  | Гость     |
+| 2.9   | 72   | Гость     |
+| 2.9   | 244  | Гость     |
+| 2.9   | 113  | Гость     |
+| 3.0   | 145  | Гость     |
+| 3.0   | 85   | Гость     |
+| 3.0   | 156  | Гость     |
+| 3.0   | 162  | Гость     |
+| 3.0   | 71   | Зарегистр.|
+| 3.2   | 90   | Гость     |
+| 3.2   | 204  | Гость     |
+| 3.3   | 129  | Гость     |
+| 3.3   | 95   | Гость     |
+| 3.4   | 75   | Гость     |
+| 3.4   | 114  | Гость     |
+| 3.4   | 157  | Гость     |
+| 3.5   | 79   | Зарегистр.|
+| 3.6   | 180  | Гость     |
+| 3.8   | 139  | Гость     |
+| 3.8   | 139  | Гость     |
+| 4.0   | 81   | Зарегистр.|
+| 4.1   | 136  | Гость     |
+| 4.9   | 124  | Гость     |
+| 5.0   | 81   | Зарегистр.|
+| 5.1   | 76   | Зарегистр.|
+| 5.2   | 99   | Зарегистр.|
+| 5.5   | 65   | Зарегистр.|
+| 5.6   | 75   | Зарегистр.|
+| 5.9   | 31   | Зарегистр.|
+| 6.2   | 54   | Зарегистр.|
+| 6.3   | 106  | Зарегистр.|
+| 6.8   | 62   | Зарегистр.|
+| 7.2   | 126  | Зарегистр.|
+| 7.2   | 21   | Зарегистр.|
+| 7.4   | 108  | Зарегистр.|
+| 7.5   | 75   | Зарегистр.|
+| 8.0   | 133  | Зарегистр.|
+| 8.2   | 49   | Зарегистр.|
+| 8.4   | 28   | Зарегистр.|
+| 8.4   | 86   | Зарегистр.|
+| 8.4   | 109  | Зарегистр.|
+| 8.5   | 81   | Зарегистр.|
+| 8.9   | 29   | Зарегистр.|
+| 8.9   | 47   | Зарегистр.|
+| 9.0   | 56   | Зарегистр.|
+| 9.0   | 90   | Зарегистр.|
+| 9.1   | 130  | Зарегистр.|
+| 9.6   | 95   | Зарегистр.|
+| 9.8   | 64   | Зарегистр.|
+| 10.0  | 48   | Зарегистр.|
+| 10.1  | 80   | Зарегистр.|
+| 10.2  | 49   | Зарегистр.|
+| 11.3  | 86   | Зарегистр.|
+| 11.5  | 65   | Зарегистр.|
+| 11.5  | 83   | Зарегистр.|
+| 12.0  | 83   | Зарегистр.|
+| 12.8  | 50   | Зарегистр.|
+| 13.1  | 83   | Зарегистр.|
+| 13.5  | 26   | Зарегистр.|
+| 13.8  | 64   | Зарегистр.|
+| 14.1  | 86   | Зарегистр.|
+| 14.4  | 68   | Зарегистр.|
+| 14.9  | 33   | Зарегистр.|
+| 15.0  | 15   | Зарегистр.|
+| 15.6  | 65   | Зарегистр.|
+| 17.1  | 73   | Зарегистр.|
+\`\`\`
+
+### Радарная диаграмма (Radar)
+
+\`\`\`chart
+type: radar
+title: Навыки
+| Навык       | Оценка |
+|-------------|--------|
+| Python      | 9      |
+| JavaScript  | 7      |
+| SQL         | 8      |
+| Git         | 6      |
+| English     | 7      |
+| Команда     | 9      |
+\`\`\`
+
+> Приложение может работать без интернета.`;
+  </script>
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MD Viewer</title>
+  
+  
+</head>
+
+<body>
+  <!-- ===== Панель инструментов (заменяет нативное меню) ===== -->
+  <div id="toolbar">
+    <!-- Файл -->
+    <div class="menu-group">
+      <button class="menu-btn" data-menu="file" title="Файл">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 2h8l4 4v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+          <path d="M11 2v4h4" />
+        </svg>
+      </button>
+      <div class="menu-dropdown" id="menu-file">
+        <button class="menu-item" data-action="new_file">Новый документ<span class="shortcut">Ctrl+N</span></button>
+        <button class="menu-item" data-action="open_file_dialog">Открыть...<span class="shortcut">Ctrl+O</span></button>
+        <hr class="menu-sep">
+        <button class="menu-item" data-action="save_current_file">Сохранить<span class="shortcut">Ctrl+S</span></button>
+        <button class="menu-item" data-action="save_current_file_as">Сохранить как...<span
+            class="shortcut">Ctrl+Shift+S</span></button>
+        <hr class="menu-sep">
+        <button class="menu-item" data-action="export_html_default_action">Экспортировать HTML</button>
+        <button class="menu-item" data-action="js:openExportAsDialog">Экспортировать HTML как...</button>
+        <hr class="menu-sep">
+        <button class="menu-item" data-action="quit_app">Выход<span class="shortcut">Ctrl+Q</span></button>
+      </div>
+    </div>
+    <!-- Правка -->
+    <div class="menu-group">
+      <button class="menu-btn" data-menu="edit" title="Правка">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linejoin="round">
+          <path d="M14.5 2.5l3 3-9 9-4 1 1-4 9-9z" />
+        </svg>
+      </button>
+      <div class="menu-dropdown" id="menu-edit">
+        <button class="menu-item" data-action="js:searchEditor">Поиск<span class="shortcut">Ctrl+F</span></button>
+        <hr class="menu-sep">
+        <button class="menu-item" data-action="js:cutText">Вырезать<span class="shortcut">Ctrl+X</span></button>
+        <button class="menu-item" data-action="js:copyText">Копировать<span class="shortcut">Ctrl+C</span></button>
+        <button class="menu-item" data-action="js:pasteText">Вставить<span class="shortcut">Ctrl+V</span></button>
+      </div>
+    </div>
+    <!-- Справка -->
+    <div class="menu-group">
+      <button class="menu-btn" data-menu="help" title="Справка">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="10" cy="10" r="8" />
+          <path d="M8 8c0-1.1.9-2 2-2s2 .9 2 2c0 1.5-2 2-2 3.5V13" stroke-linecap="round" />
+          <circle cx="10" cy="16" r="0.7" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
+      <div class="menu-dropdown" id="menu-help">
+        <button class="menu-item" data-action="about_program">О программе</button>
+        <button class="menu-item" data-action="show_shortcuts_help">Горячие клавиши</button>
+        <button class="menu-item" data-action="show_md_syntax_help">MD синтаксис</button>
+        <button class="menu-item" data-action="show_export_help_info">Экспорт HTML</button>
+      </div>
+    </div>
+    <!-- Настройки -->
+    <div class="menu-group">
+      <button class="menu-btn" data-menu="settings" title="Настройки">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3.5">
+          <circle cx="10" cy="10" r="4" />
+          <circle cx="10" cy="10" r="6" stroke-dasharray="1.8 2.9" stroke-width="3" />
+        </svg>
+      </button>
+      <div class="menu-dropdown" id="menu-settings">
+        <button class="menu-item" data-action="show_export_settings">Настройки</button>
+      </div>
+    </div>
+    <div class="toolbar-sep"></div>
+    <!-- Быстрые действия -->
+    <div class="menu-group">
+      <button class="menu-btn" title="Отменить (Ctrl+Z)" data-action="js:undoEditor">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
+          <path d="M4 10l4-4v3c4 0 6 2 7 5l-2-1c-1-1.7-2.5-2.5-5-2.5v3l-4-3.5z" />
+        </svg>
+      </button>
+    </div>
+    <div class="menu-group">
+      <button class="menu-btn" title="Повторить (Ctrl+Y)" data-action="js:redoEditor">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
+          <path d="M16 10l-4-4v3c-4 0-6 2-7 5l2-1c1-1.7 2.5-2.5 5-2.5v3l4-3.5z" />
+        </svg>
+      </button>
+    </div>
+    <div class="toolbar-sep"></div>
+    <!-- Кнопка темы -->
+    <div class="menu-group">
+      <button class="menu-btn" title="Сменить тему" data-action="js:toggleThemeFromToolbar">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="10" cy="10" r="4" />
+          <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.5 3.5l1.4 1.4M15.1 15.1l1.4 1.4M3.5 16.5l1.4-1.4M15.1 4.9l1.4-1.4"
+            stroke-linecap="round" />
+        </svg>
+      </button>
+    </div>
+  </div>
+<!-- ===== Панель форматирования Markdown ===== -->
+  <div id="fmt-bar">
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Жирный (Ctrl+B)" onclick="toggleBold()"><b>B</b></button>
+      <button class="fmt-btn" title="Курсив (Ctrl+I)" onclick="toggleItalic()"><i>I</i></button>
+      <button class="fmt-btn" title="Зачёркнутый" onclick="toggleStrikethrough()"><s>S</s></button>
+      <button class="fmt-btn" title="Инлайн-код" onclick="toggleInlineCode()"><code>&lt;/&gt;</code></button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn fmt-h-btn" title="Заголовок 1" onclick="toggleHeading(1)">H₁</button>
+      <button class="fmt-btn fmt-h-btn" title="Заголовок 2" onclick="toggleHeading(2)">H₂</button>
+      <button class="fmt-btn fmt-h-btn" title="Заголовок 3" onclick="toggleHeading(3)">H₃</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Цитата" onclick="toggleBlockquote()">❝</button>
+      <button class="fmt-btn" title="Маркированный список" onclick="toggleBulletList()">•</button>
+      <button class="fmt-btn" title="Нумерованный список" onclick="toggleOrderedList()">1.</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Ссылка" onclick="insertLink()">🔗</button>
+      <button class="fmt-btn" title="Изображение" onclick="insertImage()">🖼</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Блок кода (```)" onclick="toggleCodeBlock()">{ }</button>
+      <button class="fmt-btn" title="Горизонтальная черта (---)" onclick="insertHorizontalRule()">—</button>
+      <button class="fmt-btn" title="Таблица" onclick="openTableConfig()">⊞</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Mermaid-диаграмма" onclick="openMermaidConfig()">◇</button>
+      <button class="fmt-btn" title="Chart.js график" onclick="openChartConfig()">📊</button>
+    </div>
+  </div>
+  <!-- ===== Панель поиска ===== -->
+  <div id="search-panel">
+    <input type="text" id="search-input" placeholder="Найти..." autocomplete="off" spellcheck="false" />
+    <span id="search-count"></span>
+    <button class="search-btn" id="search-prev" title="Назад (Shift+Enter)">▲</button>
+    <button class="search-btn" id="search-next" title="Далее (Enter)">▼</button>
+    <div class="search-sep"></div>
+    <input type="text" id="replace-input" class="replace-field" placeholder="Заменить..." autocomplete="off"
+      spellcheck="false" />
+    <button class="search-btn" id="replace-one">Заменить</button>
+    <button class="search-btn" id="replace-all">Заменить все</button>
+    <div style="flex:1"></div>
+    <button class="search-btn" id="search-close" title="Закрыть (Esc)">✕</button>
+  </div>
+  <div class="container">
+    <div class="panel" id="editor"></div>
+    <div class="panel" id="preview">
+      <p style="color:#666;font-style:italic;">Loading...</p>
+    </div>
+  </div>
+  
+
+  
+
+
+  <!-- ===== Логика панели поиска ===== -->
+  
+
+
+  
+
+  <!-- ===== Логика тулбара ===== -->
+  
+
+  <!-- ===== Модальное окно справки (текстовое, с прокруткой) ===== -->
+  <div id="help-overlay"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+    <div
+      style="background:var(--bg);color:var(--fg);max-width:750px;max-height:85vh;width:90%;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <div
+        style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border);font-size:1.15em;font-weight:bold;">
+        <span id="help-title">Справка</span>
+        <button onclick="closeHelp()"
+          style="background:none;border:none;color:var(--fg);font-size:1.6em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <pre id="help-body"
+        style="padding:20px;overflow-y:auto;margin:0;white-space:pre-wrap;word-wrap:break-word;font-family:Consolas,'Courier New',monospace;font-size:0.9em;line-height:1.5;tab-size:2;"></pre>
+    </div>
+  </div>
+
+  
+  <!-- ===== Модальное окно "Настройки" (по центру) ===== -->
+  <div id="settings-overlay"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+    <div
+      style="background:var(--bg);color:var(--fg);max-width:500px;width:90%;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <div
+        style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border);font-size:1.15em;font-weight:bold;">
+        <span>Настройки</span>
+        <button onclick="closeSettingsDialog()"
+          style="background:none;border:none;color:var(--fg);font-size:1.6em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;">
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:6px;">Экспорт HTML (по умолчанию)</label>
+          <label style="display:block;margin:4px 0;"><input type="radio" name="settings-mode" value="full" checked>
+            Полный</label>
+          <label style="display:block;margin:4px 0;"><input type="radio" name="settings-mode" value="minimal">
+            Минимальный</label>
+        </div>
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:6px;">Тема экспорта</label>
+          <label style="display:block;margin:4px 0;"><input type="radio" name="settings-theme" value="dark">
+            Тёмная</label>
+          <label style="display:block;margin:4px 0;"><input type="radio" name="settings-theme" value="light">
+            Светлая</label>
+          <label style="display:block;margin:4px 0;"><input type="radio" name="settings-theme" value="current" checked>
+            Как в редакторе</label>
+        </div>
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:6px;">Папка сохранения HTML</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="settings-export-path"
+              style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);"
+              readonly onclick="pickExportFolder()">
+            <button onclick="pickExportFolder()"
+              style="padding:6px 12px;cursor:pointer;background:var(--toolbar-btn-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;">Обзор...</button>
+          </div>
+        </div>
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:6px;">Папка сохранения MD файлов</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="settings-md-path"
+              style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);"
+              readonly onclick="pickMDFolder()">
+            <button onclick="pickMDFolder()"
+              style="padding:6px 12px;cursor:pointer;background:var(--toolbar-btn-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;">Обзор...</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);">
+        <button onclick="closeSettingsDialog()"
+          style="padding:8px 20px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="saveSettings()"
+          style="padding:8px 20px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings وال Export dialogs are in the sections above -->
+
+  <!-- ===== Модальное окно "Экспортировать HTML как..." (левый верхний угол) ===== -->
+  <div id="export-as-overlay" style="display:none;position:fixed;top:40px;left:10px;z-index:9999;">
+    <div
+      style="background:var(--bg);color:var(--fg);width:420px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--border);">
+      <div
+        style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:1em;font-weight:bold;">
+        <span>Экспортировать HTML как...</span>
+        <button onclick="closeExportAsDialog()"
+          style="background:none;border:none;color:var(--fg);font-size:1.4em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:16px;overflow-y:auto;">
+        <div><label style="font-weight:bold;display:block;margin-bottom:4px;">Тип экспорта</label>
+          <label style="display:block;"><input type="radio" name="exportas-mode" value="full" checked> Полный</label>
+          <label style="display:block;"><input type="radio" name="exportas-mode" value="minimal"> Минимальный</label>
+        </div>
+        <div style="margin-top:12px;"><label style="font-weight:bold;display:block;margin-bottom:4px;">Тема</label>
+          <label style="display:block;"><input type="radio" name="exportas-theme" value="dark"> Тёмная</label>
+          <label style="display:block;"><input type="radio" name="exportas-theme" value="light"> Светлая</label>
+          <label style="display:block;"><input type="radio" name="exportas-theme" value="current" checked> Как в
+            редакторе</label>
+        </div>
+        <div style="margin-top:12px;"><label style="font-weight:bold;display:block;margin-bottom:4px;">Сохранить
+            в</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="exportas-path"
+              style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);"
+              readonly onclick="pickExportAsFolder()">
+            <button onclick="pickExportAsFolder()"
+              style="padding:5px 10px;cursor:pointer;background:var(--toolbar-btn-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;">Обзор...</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
+        <button onclick="closeExportAsDialog()"
+          style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="runExportAs()"
+          style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Экспортировать</button>
+      </div>
+    </div>
+  </div>
+<!-- ===== Модальное окно "Настройка таблицы" ===== -->
+  <div id="table-config-overlay" style="display:none;position:fixed;top:40px;left:10px;z-index:9999;">
+    <div style="background:var(--bg);color:var(--fg);width:500px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:1em;font-weight:bold;">
+        <span>Настройка таблицы</span>
+        <button onclick="closeTableConfig()" style="background:none;border:none;color:var(--fg);font-size:1.4em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:16px;font-size:0.9em;">
+        <label><input type="radio" name="table-mode" value="template" checked onclick="switchTableMode()"> Пустой шаблон</label>
+        <label><input type="radio" name="table-mode" value="data" onclick="switchTableMode()"> Из данных</label>
+      </div>
+      <div id="table-template-mode" style="padding:10px 16px;overflow-y:auto;">
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Столбцов</label>
+            <input type="number" id="table-cols" value="3" min="1" max="100" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+            <div style="color:#888;font-size:11px;margin-top:2px;">от 1 до 100</div>
+          </div>
+          <div style="flex:1;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Строк</label>
+            <input type="number" id="table-rows" value="3" min="1" max="500" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+            <div style="color:#888;font-size:11px;margin-top:2px;">от 1 до 500</div>
+          </div>
+        </div>
+      </div>
+      <div id="table-data-mode" style="display:none;padding:10px 16px;overflow-y:auto;">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <input type="checkbox" id="table-header-row" checked>
+          <span style="font-weight:bold;">Первая строка — заголовки</span>
+        </label>
+        <div id="table-columns-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+        <button onclick="addTableColumn()" style="margin-top:6px;padding:4px 12px;cursor:pointer;background:var(--toolbar-btn-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;font-size:12px;">+ Добавить столбец</button>
+        <div style="margin-top:8px;">
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Предпросмотр</label>
+          <textarea id="table-data-preview" rows="4" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--code-bg);color:var(--fg);font-family:Consolas,monospace;font-size:12px;resize:vertical;white-space:pre;" readonly></textarea>
+        </div>
+      </div>
+      <div id="table-data-msg" style="display:none;padding:10px 16px;color:#888;font-size:12px;text-align:center;">Вставьте данные в поля колонок</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
+        <button onclick="closeTableConfig()" style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="runInsertTable()" style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Вставить</button>
+      </div>
+    </div>
+  </div>
+  
+  
+  
+  
+  
+  
+<!-- ===== Модальное окно "Настройка Mermaid диаграммы" ===== -->
+  <div id="mermaid-config-overlay" style="display:none;position:fixed;top:40px;left:10px;z-index:9999;">
+    <div style="background:var(--bg);color:var(--fg);width:380px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:1em;font-weight:bold;">
+        <span>Настройка Mermaid диаграммы</span>
+        <button onclick="closeMermaidConfig()" style="background:none;border:none;color:var(--fg);font-size:1.4em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:16px;overflow-y:auto;">
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Тип диаграммы</label>
+          <select id="mermaid-type" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+            <option value="graph TD">Блок-схема сверху вниз (graph TD)</option>
+            <option value="graph LR">Блок-схема слева направо (graph LR)</option>
+            <option value="graph BT">Блок-схема снизу вверх (graph BT)</option>
+            <option value="graph RL">Блок-схема справа налево (graph RL)</option>
+            <option value="flowchart TD">Граф сверху вниз (flowchart TD)</option>
+            <option value="flowchart LR">Граф слева направо (flowchart LR)</option>
+            <option value="sequenceDiagram">Диаграмма последовательности</option>
+            <option value="pie">Круговая диаграмма (pie)</option>
+            <option value="timeline">Временная линия (timeline)</option>
+            <option value="classDiagram">Диаграмма классов</option>
+            <option value="stateDiagram">Диаграмма состояний</option>
+          </select>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Содержимое диаграммы</label>
+          <textarea id="mermaid-content" rows="5" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-family:Consolas,monospace;font-size:12px;resize:vertical;">
+    A[Начало] --> B[Конец]</textarea>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
+        <button onclick="closeMermaidConfig()" style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="runInsertMermaid()" style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Вставить</button>
+      </div>
+    </div>
+  </div>
+<!-- ===== Модальное окно "Настройка Chart.js графика" ===== -->
+  <div id="chart-config-overlay" style="display:none;position:fixed;top:40px;left:10px;z-index:9999;">
+    <div style="background:var(--bg);color:var(--fg);width:440px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:1em;font-weight:bold;">
+        <span>Настройка Chart.js графика</span>
+        <button onclick="closeChartConfig()" style="background:none;border:none;color:var(--fg);font-size:1.4em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:10px 16px;overflow-y:auto;max-height:380px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:160px;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Тип графика</label>
+            <select id="chart-type" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+              <option value="column">Столбчатый (column)</option>
+              <option value="line">Линейный (line)</option>
+              <option value="pie">Круговой (pie)</option>
+              <option value="scatter">Точечный (scatter)</option>
+              <option value="radar">Лепестковый (radar)</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Название (title)</label>
+            <input type="text" id="chart-title" value="Пример" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+          </div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Подпись X</label>
+            <input type="text" id="chart-xlabel" placeholder="напр: Месяц" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+          </div>
+          <div style="flex:1;">
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Подпись Y</label>
+            <input type="text" id="chart-ylabel" placeholder="напр: Продажи" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="font-weight:bold;margin-bottom:6px;">Данные</div>
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <input type="checkbox" id="chart-header-row" checked>
+            <span>Первая строка — заголовки</span>
+          </label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="chart-data-columns">
+            <div style="flex:1;min-width:160px;">
+              <label style="font-weight:bold;display:block;margin-bottom:2px;font-size:12px;">Категории</label>
+              <textarea id="chart-categories" rows="3" placeholder="Категория 1&#10;Категория 2&#10;Категория 3" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-family:Consolas,monospace;font-size:12px;resize:vertical;"></textarea>
+              <select style="margin-top:2px;width:100%;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);font-size:11px;" id="chart-sep-categories">
+                <option value="auto">Разделитель: авто</option>
+                <option value="\n">Новая строка</option>
+                <option value=",">Запятая</option>
+                <option value=";">Точка с запятой</option>
+                <option value="/">Слэш</option>
+                <option value="\t">Табуляция</option>
+                <option value="|">Вертикальная черта</option>
+                <option value=" ">Пробел</option>
+              </select>
+            </div>
+          </div>
+          <div id="chart-series-list" style="margin-top:6px;display:flex;flex-direction:column;gap:6px;"></div>
+          <button onclick="addChartSeries()" style="margin-top:4px;padding:3px 10px;cursor:pointer;background:var(--toolbar-btn-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;font-size:12px;">+ Добавить ряд данных</button>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Шаблон (авто-генерация)</label>
+          <textarea id="chart-template" rows="5" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--code-bg);color:var(--fg);font-family:Consolas,monospace;font-size:12px;resize:vertical;white-space:pre;" readonly></textarea>
+          <div id="chart-warning" style="display:none;margin-top:4px;color:#ff6b6b;font-size:12px;font-weight:bold;"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
+        <button onclick="closeChartConfig()" style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="runInsertChart()" style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Вставить</button>
+      </div>
+    </div>
+  </div>
+  <script src="editor.bundle.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>

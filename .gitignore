@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+
+# Build outputs
+build/
+dist/
+*.exe
+*.msi
+
+# IDE
+.vscode/
+.idea/
+
+# cm-builder (Node.js)
+cm-builder/node_modules/
+cm-builder/dist/
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,632 @@
+
+    :root {
+      --bg: #1e1e1e;
+      --fg: #d4d4d4;
+      --border: #333;
+      --heading: #e1e1e1;
+      --code-bg: #2d2d2d;
+      --pre-bg: #2d2d2d;
+      --blockquote-color: #999;
+      --table-th-bg: #2d2d2d;
+      --table-border: #444;
+      --hr-border: #333;
+      --link-color: #4c9aff;
+      --preview-border: #333;
+      --strong-color: #e1e1e1;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .panel {
+      flex: 1;
+      overflow: auto;
+    }
+
+    #editor {
+      height: 100%;
+      width: 100%;
+    }
+
+    #preview {
+      padding: 24px 32px;
+      border-left: 2px solid var(--preview-border);
+      line-height: 1.6;
+    }
+
+    #preview h1 {
+      font-size: 2em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin: 16px 0 8px;
+      color: var(--heading);
+    }
+
+    #preview h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      margin: 14px 0 6px;
+      color: var(--heading);
+    }
+
+    #preview h3 {
+      font-size: 1.25em;
+      margin: 12px 0 6px;
+      color: var(--heading);
+    }
+
+    #preview p {
+      margin: 8px 0;
+    }
+
+    #preview ul,
+    #preview ol {
+      padding-left: 24px;
+      margin: 8px 0;
+    }
+
+    #preview code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.9em;
+    }
+
+    #preview pre {
+      background: var(--pre-bg);
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    #preview pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    #preview blockquote {
+      border-left: 4px solid #4c9aff;
+      padding-left: 16px;
+      margin: 12px 0;
+      color: var(--blockquote-color);
+    }
+
+    #preview table {
+      border-collapse: collapse;
+      margin: 12px 0;
+      width: 100%;
+    }
+
+    #preview th,
+    #preview td {
+      border: 1px solid var(--table-border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    #preview th {
+      background: var(--table-th-bg);
+    }
+
+    #preview a {
+      color: var(--link-color);
+      text-decoration: none;
+    }
+
+    #preview a:hover {
+      text-decoration: underline;
+    }
+
+    #preview strong {
+      color: var(--strong-color);
+    }
+
+    #preview img {
+      max-width: 100%;
+      border-radius: 4px;
+    }
+
+    #preview hr {
+      border: none;
+      border-top: 1px solid var(--hr-border);
+      margin: 16px 0;
+    }
+/* Mermaid-схемы — убираем фоновый прямоугольник (сливается со страницей) */
+    #preview .mermaid svg rect:first-child {
+      fill: transparent !important;
+    }
+    #preview .mermaid svg {
+      background: transparent !important;
+    }
+    /* Убираем фон и паддинг у обёртки pre.mermaid */
+    #preview pre.mermaid {
+      background: transparent !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+    }
+
+    /* ===== Светлая тема ===== */
+/* Mermaid-схемы — прозрачный фон (сливается со страницей) */
+    #preview .mermaid svg {
+      background: transparent !important;
+    }
+    /* Убираем фон и паддинг у обёртки pre.mermaid — она не должна создавать видимую область */
+    #preview pre.mermaid {
+      background: transparent !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+
+    /* ===== Светлая тема ===== */
+    [data-theme="light"] {
+      --bg: #ffffff;
+      --fg: #1e1e1e;
+      --border: #ddd;
+      --heading: #1a1a1a;
+      --code-bg: #f5f5f5;
+      --pre-bg: #f5f5f5;
+      --blockquote-color: #666;
+      --table-th-bg: #f0f0f0;
+      --table-border: #ddd;
+      --hr-border: #e0e0e0;
+      --link-color: #1a73e8;
+      --preview-border: #e0e0e0;
+      --strong-color: #1a1a1a;
+    }
+
+    /* CodeMirror — светлая тема */
+    [data-theme="light"] .cm-editor {
+      background: #fafafa;
+      color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-gutters {
+      background: #f0f0f0;
+      color: #888;
+      border-right: 1px solid #ddd;
+    }
+
+    [data-theme="light"] .cm-editor .cm-activeLineGutter {
+      background: #e8e8e8;
+    }
+
+    [data-theme="light"] .cm-editor .cm-activeLine {
+      background: #e8e8e8;
+    }
+
+    [data-theme="light"] .cm-editor .cm-selectionBackground,
+    [data-theme="light"] .cm-editor.cm-focused .cm-selectionBackground {
+      background: #c5d9f2;
+    }
+
+    [data-theme="light"] .cm-editor .cm-cursor {
+      border-left-color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-matchingBracket {
+      background: #c5d9f2;
+    }
+
+    /* ===== Панель инструментов (тулбар) ===== */
+    :root {
+      --toolbar-bg: #252526;
+      --toolbar-border: #3c3c3c;
+      --toolbar-btn-hover: #3c3c3c;
+      --toolbar-btn-active: #505050;
+      --dropdown-bg: #252526;
+      --dropdown-border: #454545;
+      --dropdown-item-hover: #094771;
+      --dropdown-item-color: #cccccc;
+    }
+
+    [data-theme="light"] {
+      --toolbar-bg: #f3f3f3;
+      --toolbar-border: #d4d4d4;
+      --toolbar-btn-hover: #e0e0e0;
+      --toolbar-btn-active: #d0d0d0;
+      --dropdown-bg: #ffffff;
+      --dropdown-border: #c8c8c8;
+      --dropdown-item-hover: #e8f0fe;
+      --dropdown-item-color: #333333;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      padding: 0 4px;
+      user-select: none;
+      position: relative;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .menu-group {
+      position: relative;
+    }
+
+    .menu-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 30px;
+      margin: 0 1px;
+      padding: 4px;
+      background: none;
+      border: none;
+      border-radius: 4px;
+      color: var(--fg);
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    .menu-btn:hover {
+      background: var(--toolbar-btn-hover);
+    }
+
+    .menu-btn:active,
+    .menu-btn.active {
+      background: var(--toolbar-btn-active);
+    }
+
+    .menu-btn svg {
+      display: block;
+    }
+
+    .toolbar-sep {
+      width: 1px;
+      height: 20px;
+      margin: 0 6px;
+      background: var(--toolbar-border);
+      flex-shrink: 0;
+    }
+
+    .toolbar-spacer {
+      flex: 1;
+    }
+
+/* ===== Панель форматирования Markdown ===== */
+    #fmt-bar {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      padding: 0 6px;
+      user-select: none;
+      flex-shrink: 0;
+      gap: 0;
+    }
+
+    .fmt-group {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .fmt-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 24px;
+      padding: 0 4px;
+      background: none;
+      border: none;
+      border-radius: 3px;
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: all 0.1s;
+      line-height: 1;
+    }
+
+    .fmt-btn:hover {
+      background: var(--toolbar-btn-hover);
+    }
+
+    .fmt-btn:active {
+      background: var(--toolbar-btn-active);
+    }
+
+    .fmt-btn b { font-weight: 700; }
+    .fmt-btn i { font-style: italic; }
+    .fmt-btn s { text-decoration: line-through; }
+    .fmt-btn code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      background: var(--code-bg);
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+
+    .fmt-h-btn {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .fmt-sep {
+      width: 1px;
+      height: 16px;
+      margin: 0 5px;
+      background: var(--toolbar-border);
+      flex-shrink: 0;
+    }
+    /* Выпадающее меню */
+    .menu-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      min-width: 220px;
+      padding: 4px 0;
+      background: var(--dropdown-bg);
+      border: 1px solid var(--dropdown-border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+    }
+
+    .menu-dropdown.open {
+      display: block;
+    }
+
+    .menu-dropdown .menu-item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: 6px 16px;
+      background: none;
+      border: none;
+      color: var(--dropdown-item-color);
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .menu-dropdown .menu-item:hover {
+      background: var(--dropdown-item-hover);
+      color: var(--fg);
+    }
+
+    .menu-dropdown .menu-item .shortcut {
+      margin-left: auto;
+      padding-left: 32px;
+      color: #888;
+      font-size: 11px;
+    }
+
+    .menu-dropdown .menu-sep {
+      height: 1px;
+      margin: 3px 8px;
+      background: var(--toolbar-border);
+      border: none;
+    }
+
+    /* ===== Панель поиска (кастомная, в стиле VS Code) ===== */
+    #search-panel {
+      display: none;
+      align-items: center;
+      height: 38px;
+      flex-shrink: 0;
+      padding: 0 10px;
+      gap: 6px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      font-size: 13px;
+      z-index: 90;
+    }
+
+    #search-panel input[type="text"] {
+      height: 26px;
+      padding: 2px 8px;
+      border: 1px solid var(--toolbar-border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--fg);
+      outline: none;
+      font-size: 13px;
+      width: 180px;
+    }
+
+    #search-panel input[type="text"]:focus {
+      border-color: #4c9aff;
+    }
+
+    #search-panel input[type="text"].replace-field {
+      width: 150px;
+    }
+
+    #search-panel .search-btn {
+      height: 26px;
+      padding: 0 8px;
+      cursor: pointer;
+      background: var(--toolbar-btn-hover);
+      color: var(--fg);
+      border: 1px solid var(--toolbar-border);
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    #search-panel .search-btn:hover {
+      background: var(--toolbar-btn-active);
+    }
+
+    #search-count {
+      color: #888;
+      font-size: 12px;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .search-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--toolbar-border);
+    }
+
+    /* Подсветка совпадений в редакторе */
+    .cm-editor .cm-searchMatch {
+      background-color: rgba(76, 154, 255, 0.22);
+      outline: 1px solid rgba(76, 154, 255, 0.55);
+    }
+
+    .cm-editor .cm-searchMatch-selected {
+      background-color: rgba(76, 154, 255, 0.5);
+    }
+
+    [data-theme="light"] .cm-editor .cm-tooltip {
+      background: #fff;
+      color: #1e1e1e;
+      border: 1px solid #ddd;
+    }
+
+    /* Стили синтаксиса CodeMirror для светлой темы */
+    [data-theme="light"] .cm-editor .cm-comment {
+      color: #008000;
+    }
+
+    [data-theme="light"] .cm-editor .cm-keyword {
+      color: #00f;
+    }
+
+    [data-theme="light"] .cm-editor .cm-string {
+      color: #a31515;
+    }
+
+    [data-theme="light"] .cm-editor .cm-number {
+      color: #098658;
+    }
+
+    [data-theme="light"] .cm-editor .cm-def {
+      color: #001080;
+    }
+
+    [data-theme="light"] .cm-editor .cm-operator {
+      color: #000;
+    }
+
+    [data-theme="light"] .cm-editor .cm-atom {
+      color: #098658;
+    }
+
+    [data-theme="light"] .cm-editor .cm-meta {
+      color: #800000;
+    }
+
+    [data-theme="light"] .cm-editor .cm-variable {
+      color: #001080;
+    }
+
+    [data-theme="light"] .cm-editor .cm-variable-2 {
+      color: #001080;
+    }
+
+    [data-theme="light"] .cm-editor .cm-variable-3 {
+      color: #001080;
+    }
+
+    [data-theme="light"] .cm-editor .cm-type {
+      color: #267f99;
+    }
+
+    [data-theme="light"] .cm-editor .cm-builtin {
+      color: #795e26;
+    }
+
+    [data-theme="light"] .cm-editor .cm-tag {
+      color: #800000;
+    }
+
+    [data-theme="light"] .cm-editor .cm-attribute {
+      color: #e06c75;
+    }
+
+    [data-theme="light"] .cm-editor .cm-quote {
+      color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-bracket {
+      color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-hr {
+      color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-link {
+      color: #1a73e8;
+    }
+
+    [data-theme="light"] .cm-editor .cm-url {
+      color: #1a73e8;
+    }
+
+    [data-theme="light"] .cm-editor .cm-formatting {
+      color: #1e1e1e;
+    }
+
+    [data-theme="light"] .cm-editor .cm-strikethrough {
+      color: #888;
+    }
+
+    [data-theme="light"] .cm-editor .cm-em {
+      font-style: italic;
+    }
+
+    [data-theme="light"] .cm-editor .cm-strong {
+      font-weight: bold;
+    }
+
+    /* Mermaid и Chart.js — светлая тема */
+    [data-theme="light"] .mermaid svg {
+      filter: brightness(1);
+    }
+
+    [data-theme="light"] [id^='chart-'] {
+      filter: brightness(1);
+    }
+
+    /* Mermaid и Chart.js — тёмная тема (чуть приглушаем яркость) */
+    [data-theme="dark"] .mermaid svg {
+      filter: invert(0.87) brightness(0.95);
+    }
+
+    [data-theme="dark"] [id^='chart-'] {
+      filter: brightness(0.85);
+    }
+  
