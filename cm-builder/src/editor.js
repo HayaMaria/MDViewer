@@ -583,91 +583,199 @@ window.getRenderedBodyHTML = function () {
   return marked.parse(view.state.doc.toString());
 };
 // ===== Функции форматирования Markdown (панель инструментов) =====
+// ===== Режим форматирования (toggle/wrap/unwrap) =====
+window.formatMode = 'toggle';
 
-/**
+window.cycleFormatMode = function () {
+  if (window.formatMode === 'toggle') window.formatMode = 'wrap';
+  else if (window.formatMode === 'wrap') window.formatMode = 'unwrap';
+  else window.formatMode = 'toggle';
+  var btn = document.getElementById('fmt-mode-btn');
+  if (btn) {
+    var labels = {
+      toggle: { icon: '\u21C4', title: '\u0421\u043C\u0435\u0448\u0430\u043D\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C: \u043E\u0431\u043E\u0440\u0430\u0447\u0438\u0432\u0430\u0442\u044C/\u0441\u043D\u0438\u043C\u0430\u0442\u044C' },
+      wrap: { icon: '\u2295', title: '\u0422\u043E\u043B\u044C\u043A\u043E \u0434\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0444\u043E\u0440\u043C\u0430\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435' },
+      unwrap: { icon: '\u2296', title: '\u0422\u043E\u043B\u044C\u043A\u043E \u0441\u043D\u044F\u0442\u044C \u0444\u043E\u0440\u043C\u0430\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435' }
+    };
+    var info = labels[window.formatMode] || labels.toggle;
+    btn.innerHTML = info.icon;
+    btn.title = info.title;
+    btn.className = 'fmt-btn' + (window.formatMode !== 'toggle' ? ' active' : '');
+  }
+};
+
+function smartToggleFormat(text, before, after, mode) {
+  if (typeof text !== 'string' || !text) return { toggled: false, text: text || '' };
+  mode = mode || 'toggle';
+  var bEsc = before.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var aEsc = after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var pairRe = new RegExp(bEsc + '([\\s\\S]*?)' + aEsc, 'g');
+  var parts = [], lastIdx = 0, foundPair = false, m;
+  while ((m = pairRe.exec(text)) !== null) {
+    foundPair = true;
+    if (m && m.index > lastIdx) {
+      var plain = text.slice(lastIdx, m.index);
+      var ls = (plain && plain.match(/^(\s*)/) || ['', ''])[1];
+      var rs = (plain && plain.match(/(\s*)$/) || ['', ''])[1];
+      var mid = plain.slice(ls.length, plain.length - rs.length);
+      if (mode === 'unwrap') {
+        parts.push(plain); // не оборачиваем непарный текст
+      } else {
+        if (mid.length) { parts.push(ls + before + mid + after + rs); }
+        else { parts.push(plain); }
+      }
+    }
+    if (m && m[1] !== undefined) {
+      if (mode === 'wrap') {
+        parts.push(m[0]); // сохраняем оригинальную обёртку
+      } else {
+        parts.push(m[1]); // снимаем обёртку (toggle/unwrap)
+      }
+    }
+    lastIdx = pairRe.lastIndex;
+  }
+  if (foundPair) {
+    if (lastIdx < text.length) {
+      var rest = text.slice(lastIdx);
+      if (mode === 'unwrap') {
+        parts.push(rest); // не оборачиваем
+      } else {
+        var ls = (rest && rest.match(/^(\s*)/) || ['', ''])[1];
+        var rs = (rest && rest.match(/(\s*)$/) || ['', ''])[1];
+        var mid = rest.slice(ls.length, rest.length - rs.length);
+        if (mid.length) { parts.push(ls + before + mid + after + rs); }
+        else { parts.push(rest); }
+      }
+    }
+    return { toggled: true, text: parts.join('') };
+  }
+  // Нет ни одной пары
+  if (mode === 'unwrap') return { toggled: false, text: text };
+  if (mode === 'wrap') return { toggled: false, text: text };
+  // toggle: проверим, обёрнут ли весь текст снаружи
+  var outerRe = new RegExp('^' + bEsc + '([\\s\\S]*)' + aEsc + '$');
+  var outerMatch = text.match(outerRe);
+  if (outerMatch && outerMatch[1] !== undefined) {
+    return { toggled: true, text: outerMatch[1] };
+  }
+  return { toggled: false, text: text };
+}
+  /**
  * Оборачивает выделенный текст в маркеры форматирования.
  * Работает построчно для многострочного выделения.
- * Если текст уже обёрнут — снимает форматирование (toggle).
  */
 function wrapSelection(before, after) {
+  view.focus();
   var sel = view.state.selection.main;
-  var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
+  var from = sel.from, to = sel.to;
+  var doc = view.state.doc;
+  // Расширяем выделение на маркеры сразу за краями
+  if (!sel.empty) {
+    if (from >= before.length && doc.sliceString(from - before.length, from) === before) {
+      from -= before.length;
+    }
+    if (to + after.length <= doc.length && doc.sliceString(to, to + after.length) === after) {
+      to += after.length;
+    }
+  }
+  var text = from === to ? '' : doc.sliceString(from, to);
   if (!text) {
     var insert = before + after;
     view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: insert },
-      selection: { anchor: sel.from + before.length, head: sel.from + before.length },
+      changes: { from: from, to: to, insert: insert },
+      selection: { anchor: from + before.length, head: from + before.length },
       scrollIntoView: true,
       userEvent: 'input.formatting'
     });
     view.focus();
     return;
   }
-
+  var mode = window.formatMode || 'toggle';
   // Многострочный режим
   if (text.indexOf('\n') !== -1) {
     var lines = text.split('\n');
     var resultLines = [];
-    var allWrapped = true;
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
-      if (line.length > 0 && line.indexOf(before) === 0 && line.lastIndexOf(after) === line.length - after.length && line.length >= before.length + after.length) {
-        resultLines.push(line.slice(before.length, -after.length));
-      } else if (line.length === 0) {
-        resultLines.push('');
-        allWrapped = false;
-      } else {
-        resultLines.push(before + line + after);
-        allWrapped = false;
-      }
-    }
-    if (allWrapped) {
-      resultLines = [];
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        if (line.length >= before.length + after.length) {
-          resultLines.push(line.slice(before.length, -after.length));
-        } else {
-          resultLines.push(line);
-        }
+      var st = smartToggleFormat(line, before, after, mode);
+      if (mode === 'toggle') {
+        if (st.toggled) { resultLines.push(st.text); }
+        else if (line.length > 0) { resultLines.push(before + line + after); }
+        else { resultLines.push(''); }
+      } else if (mode === 'wrap') {
+        if (st.toggled) { resultLines.push(st.text); }
+        else if (line.length === 0) { resultLines.push(''); }
+        else { resultLines.push(before + line + after); }
+      } else if (mode === 'unwrap') {
+        if (st.toggled) { resultLines.push(st.text); }
+        else { resultLines.push(line); }
       }
     }
     var insert = resultLines.join('\n');
     view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: insert },
-      selection: { anchor: sel.from, head: sel.from + insert.length },
+      changes: { from: from, to: to, insert: insert },
+      selection: { anchor: from, head: from + insert.length },
       scrollIntoView: true,
       userEvent: 'input.formatting'
     });
     view.focus();
     return;
   }
-
   // Однострочный
-  var isWrapped = text.indexOf(before) === 0 && text.lastIndexOf(after) === text.length - after.length && text.length >= before.length + after.length;
-  if (isWrapped) {
-    var inner = text.slice(before.length, -after.length);
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: inner },
-      selection: { anchor: sel.from, head: sel.from + inner.length },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-  } else {
-    var insert = before + text + after;
-    var anchor = sel.from + before.length;
-    var head = sel.from + insert.length - after.length;
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: insert },
-      selection: { anchor: anchor, head: text ? head : anchor },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
+  var st = smartToggleFormat(text, before, after, mode);
+  if (mode === 'toggle') {
+    if (st.toggled) {
+      view.dispatch({
+        changes: { from: from, to: to, insert: st.text },
+        selection: { anchor: from, head: from + st.text.length },
+        scrollIntoView: true,
+        userEvent: 'input.formatting'
+      });
+    } else {
+      var insert = before + text + after;
+      var anchor = from + before.length;
+      var head = from + insert.length - after.length;
+      view.dispatch({
+        changes: { from: from, to: to, insert: insert },
+        selection: { anchor: anchor, head: text ? head : anchor },
+        scrollIntoView: true,
+        userEvent: 'input.formatting'
+      });
+    }
+  } else if (mode === 'wrap') {
+    if (st.toggled) {
+      view.dispatch({
+        changes: { from: from, to: to, insert: st.text },
+        selection: { anchor: from, head: from + st.text.length },
+        scrollIntoView: true,
+        userEvent: 'input.formatting'
+      });
+    } else if (text.length > 0) {
+      var insert = before + text + after;
+      var anchor = from + before.length;
+      var head = from + insert.length - after.length;
+      view.dispatch({
+        changes: { from: from, to: to, insert: insert },
+        selection: { anchor: anchor, head: text ? head : anchor },
+        scrollIntoView: true,
+        userEvent: 'input.formatting'
+      });
+    }
+  } else if (mode === 'unwrap') {
+    if (st.toggled) {
+      view.dispatch({
+        changes: { from: from, to: to, insert: st.text },
+        selection: { anchor: from, head: from + st.text.length },
+        scrollIntoView: true,
+        userEvent: 'input.formatting'
+      });
+    }
   }
   view.focus();
 }
 
 function linePrefix(prefix) {
+  view.focus();
   var sel = view.state.selection.main;
   var doc = view.state.doc;
   var fromLine = doc.lineAt(sel.from);
@@ -686,14 +794,15 @@ function linePrefix(prefix) {
   view.focus();
 }
 
-window.toggleBold = function () { wrapSelection('**', '**'); };
-window.toggleItalic = function () { wrapSelection('*', '*'); };
-window.toggleStrikethrough = function () { wrapSelection('~~', '~~'); };
-window.toggleInlineCode = function () { wrapSelection('`', '`'); };
+window.toggleBold = function () { view.focus(); wrapSelection('**', '**'); };
+window.toggleItalic = function () { view.focus(); wrapSelection('*', '*'); };
+window.toggleStrikethrough = function () { view.focus(); wrapSelection('~~', '~~'); };
+window.toggleInlineCode = function () { view.focus(); wrapSelection('`', '`'); };
 /**
  * Блок кода: оборачивает выделенный текст в ``` и обратно (toggle)
  */
 window.toggleCodeBlock = function () {
+  view.focus();
   var sel = view.state.selection.main;
   var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
   var trimmed = text.trim();
