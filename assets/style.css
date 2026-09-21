@@ -634,4 +634,70 @@
     [data-theme="dark"] [id^='chart-'] {
       filter: brightness(0.85);
     }
+
+    /* ===== Status Bar ===== */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 2px 12px;
+      font-size: 12px;
+      font-family: "Consolas", "Courier New", monospace;
+      min-height: 24px;
+      flex-shrink: 0;
+      user-select: none;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--fg);
+    }
+
+    .status-bar .status-item {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .status-bar .status-item .label {
+      color: #888;
+    }
+
+    .status-bar .status-item .value {
+      color: var(--fg);
+    }
+
+    .status-bar .status-save {
+      margin-left: auto;
+    }
+
+    .status-bar .status-save.saved {
+      color: #4caf50;
+    }
+
+    .status-bar .status-save.unsaved {
+      color: #ff9800;
+    }
+
+    /* Светлая тема — статус-бар */
+    [data-theme="light"] .status-bar {
+      background: #f3f3f3;
+      border-top-color: #d4d4d4;
+      color: #555;
+    }
+
+    [data-theme="light"] .status-bar .status-item .label {
+      color: #999;
+    }
+
+    [data-theme="light"] .status-bar .status-item .value {
+      color: #333;
+    }
+
+    [data-theme="light"] .status-bar .status-save.saved {
+      color: #2e7d32;
+    }
+
+    [data-theme="light"] .status-bar .status-save.unsaved {
+      color: #e65100;
+    }
   

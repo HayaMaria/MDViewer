@@ -366,6 +366,16 @@ window.setSearchMatchHighlight = function (text) {
   view.dispatch({ effects: setSearchText.of(text || "") });
 };
 
+// Функция обновления позиции курсора в статус-баре
+function updateCursorPosition(view) {
+  const pos = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(pos);
+  const lineNumber = line.number;       // 1-based
+  const colNumber = pos - line.from + 1; // 1-based
+  if (window.updateStatusBarCursor) {
+    window.updateStatusBarCursor(lineNumber, colNumber);
+  }
+}
 // Создаём редактор
 // Светлая тема для CodeMirror — И selection, И active line через EditorView.theme()
 let view = new EditorView({
@@ -379,6 +389,12 @@ let view = new EditorView({
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         updatePreview();
+        // Помечаем как несохранённое при изменении документа
+        if (window.markUnsaved) window.markUnsaved();
+      }
+      // Обновляем позицию курсора при любом изменении выделения или документа
+      if (update.selectionSet || update.docChanged) {
+        updateCursorPosition(update.view);
       }
     }),
   ],

@@ -56,6 +56,38 @@
       }
     })();
   
+// ===== Статус-бар (строка состояния) =====
+    var isModified = false;
+
+    window.updateStatusBarCursor = function (line, col) {
+      var lineEl = document.getElementById('status-line');
+      var colEl = document.getElementById('status-col');
+      if (lineEl) lineEl.textContent = line;
+      if (colEl) colEl.textContent = col;
+    };
+
+    window.setFileName = function (name) {
+      var el = document.getElementById('status-filename');
+      if (el) el.textContent = name || 'Новый документ';
+    };
+
+    window.markSaved = function () {
+      isModified = false;
+      var el = document.getElementById('status-save');
+      if (el) {
+        el.textContent = 'Сохранено';
+        el.className = 'status-item status-save saved';
+      }
+    };
+
+    window.markUnsaved = function () {
+      isModified = true;
+      var el = document.getElementById('status-save');
+      if (el) {
+        el.textContent = 'Не сохранено';
+        el.className = 'status-item status-save unsaved';
+      }
+    };
 
     (function () {
       var panel = document.getElementById('search-panel');

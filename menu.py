@@ -9,6 +9,8 @@ def new_document():
     global api
     api.current_file = None
     window.title = 'MD Viewer — Новый документ'
+    window.evaluate_js('setFileName("Новый документ")')
+    window.evaluate_js('markSaved()')
 
 
 
@@ -28,6 +30,8 @@ def open_file():
             window.evaluate_js(f'setEditorContent({escaped})')
             api.current_file = filepath
             window.title = f'MD Viewer — {os.path.basename(filepath)}'
+            window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
+            window.evaluate_js('markSaved()')
         except Exception as e:
             window.evaluate_js(f'alert("Ошибка открытия файла: {str(e)}")')
 
@@ -41,6 +45,7 @@ def save_file():
         try:
             with open(api.current_file, 'w', encoding='utf-8') as f:
                 f.write(content)
+            window.evaluate_js('markSaved()')
         except Exception as e:
             window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
     else:
@@ -58,6 +63,8 @@ def save_file():
                 f.write(content)
             api.current_file = filepath
             window.title = f'MD Viewer — {os.path.basename(filepath)}'
+            window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
+            window.evaluate_js('markSaved()')
         except Exception as e:
             window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
 
@@ -79,6 +86,8 @@ def save_file_as():
                 f.write(content)
             api.current_file = filepath
             window.title = f'MD Viewer — {os.path.basename(filepath)}'
+            window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
+            window.evaluate_js('markSaved()')
         except Exception as e:
             window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
 
