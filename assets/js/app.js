@@ -41,8 +41,30 @@
         });
       }
 
+      // Перерендерим nomnoml-диаграммы с новыми цветами
+      if (typeof nomnoml !== 'undefined') {
+        document.querySelectorAll("#preview .nomnoml-diagram").forEach(function (el) {
+          var code = decodeURIComponent(el.dataset.nomnomlCode || '');
+          if (code && typeof window.renderNomnoml === 'function') {
+            window.renderNomnoml(el, code);
+          }
+        });
+      }
+
       // Код Mermaid не трогаем — CSS делает фон прозрачным
     }
+
+    // ===== Единая функция рендеринга nomnoml (учитывает тему) =====
+    window.renderNomnoml = function (el, code) {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      var isDark = theme === 'dark';
+      var fill = 'transparent';
+      var stroke = isDark ? '#d4d4d4' : '#333333';
+      var lineColor = isDark ? '#aaaaaa' : '#555555';
+      var styledCode = '#fill: ' + fill + '\n#stroke: ' + stroke + '\n#lineColor: ' + lineColor + '\n' + code;
+      var svgString = nomnoml.renderSvg(styledCode, document);
+      el.innerHTML = svgString;
+    };
 
     // При загрузке страницы — применяем сохранённую тему из Python
     // Опрашиваем pywebview мост, пока он не появится

@@ -220,10 +220,9 @@ function updatePreview() {
   // Рендерим диаграммы nomnoml
   document.querySelectorAll("#preview .nomnoml-diagram").forEach((el) => {
     const code = decodeURIComponent(el.dataset.nomnomlCode || "");
-    if (code && typeof nomnoml !== "undefined") {
+    if (code && typeof window.renderNomnoml === "function") {
       try {
-        const svgString = nomnoml.renderSvg(code, document);
-        el.innerHTML = svgString;
+        window.renderNomnoml(el, code);
       } catch (e) {
         el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
       }
