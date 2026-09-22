@@ -573,36 +573,7 @@ window.runInsertTable = function () {
   }
   closeTableConfig();
 };
-    window.openMermaidConfig = function () {
-      document.getElementById("mermaid-config-overlay").style.display = "block";
-    };
-    window.closeMermaidConfig = function () {
-      document.getElementById("mermaid-config-overlay").style.display = "none";
-    };
-
-    var MERMAID_PRESETS = {
-      "graph TD": "    A[Начало] --> B{Вопрос?}\n    B -->|Да| C[Конец]\n    B -->|Нет| A",
-      "graph LR": "    A[Идея] --> B[Прототип]\n    B --> C[Готово]",
-      "graph BT": "    A[1] --> B[2]\n    B --> C[3]",
-      "graph RL": "    A[4] --> B[3]\n    B --> C[2]",
-      "flowchart TD": "    A[Начало] --> B{Условие}\n    B -- Да --> C[Действие]\n    B -- Нет --> D[Отмена]",
-      "flowchart LR": "    A[Вход] --> B[Обработка]\n    B --> C[Выход]",
-      "sequenceDiagram": "    participant A как Пользователь\n    participant B как Сервер\n    A->>B: Запрос\n    B-->>A: Ответ",
-      "pie": '    "Разработка": 50\n    "Дизайн": 30\n    "Тесты": 20',
-      "timeline": '    title История\n    2020: Запуск\n    2021: Рост\n    2022: Лидер',
-      "classDiagram": "    class Animal {\n      +String name\n      +eat()\n    }\n    class Dog {\n      +bark()\n    }\n    Dog <|-- Animal",
-      "stateDiagram": "    [*] --> Ожидание\n    Ожидание --> Запуск\n    Запуск --> [*]"
-    };
-
-    window.runInsertTable = function () {
-      var cols = parseInt(document.getElementById("table-cols").value, 10) || 3;
-      var rows = parseInt(document.getElementById("table-rows").value, 10) || 3;
-      cols = Math.max(1, Math.min(10, cols));
-      rows = Math.max(1, Math.min(20, rows));
-      if (window.insertText) window.insertText(buildTableTemplate(cols, rows));
-      closeTableConfig();
-    };
-// ===== Диалог настройки Mermaid =====
+    // ===== Диалог настройки Mermaid =====
     window.openMermaidConfig = function () {
       document.getElementById("mermaid-config-overlay").style.display = "block";
     };
