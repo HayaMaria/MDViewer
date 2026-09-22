@@ -582,32 +582,47 @@ window.runInsertTable = function () {
     };
 
     var MERMAID_PRESETS = {
-      "graph TD": "    A[Начало] --> B{Вопрос?}\n    B -->|Да| C[Конец]\n    B -->|Нет| A",
-      "graph LR": "    A[Идея] --> B[Прототип]\n    B --> C[Готово]",
-      "graph BT": "    A[1] --> B[2]\n    B --> C[3]",
-      "graph RL": "    A[4] --> B[3]\n    B --> C[2]",
       "flowchart TD": "    A[Начало] --> B{Условие}\n    B -- Да --> C[Действие]\n    B -- Нет --> D[Отмена]",
+      "flowchart BT": "    A[1] --> B[2]\n    B --> C[3]",
       "flowchart LR": "    A[Вход] --> B[Обработка]\n    B --> C[Выход]",
-      "sequenceDiagram": "    participant A как Пользователь\n    participant B как Сервер\n    A->>B: Запрос\n    B-->>A: Ответ",
-      "pie": '    "Разработка": 50\n    "Дизайн": 30\n    "Тесты": 20',
-      "timeline": '    title История\n    2020: Запуск\n    2021: Рост\n    2022: Лидер',
+      "flowchart RL": "    A[4] --> B[3]\n    B --> C[2]"
+    };
+
+    var UML_PRESETS = {
+      "sequenceDiagram": "    participant A as User\n    participant B as Server\n    A->>B: Request\n    B-->>A: Response",
       "classDiagram": "    class Animal {\n      +String name\n      +eat()\n    }\n    class Dog {\n      +bark()\n    }\n    Dog <|-- Animal",
-      "stateDiagram": "    [*] --> Ожидание\n    Ожидание --> Запуск\n    Запуск --> [*]"
+      "stateDiagram": "    [*] --> Idle\n    Idle --> Running\n    Running --> [*]",
+      "timeline": "    title History\n    2020: Launch\n    2021: Growth\n    2022: Leader",
+      "nomnoml:useCase": "[User]\n[Admin]\n[User] -> [Login]\n[User] -> [View]\n[Admin] -> [Manage]",
+      "nomnoml:activity": "[start] -> [Step 1]\n[Step 1] -> [Step 2]\n[Step 2] -> [end]",
+      "nomnoml:component": "[Client] <-> [API]\n[API] <-> [Service A]\n[API] <-> [Service B]\n[Service A] <-> [(DB)]\n[Service B] <-> [(DB)]",
+      "nomnoml:package": "[Client Layer]\n[Business Logic]\n[Data Layer]\n[Client Layer] <-> [Business Logic]\n[Business Logic] <-> [Data Layer]"
     };
 
     window.syncMermaidContent = function () {
       var sel = document.getElementById("mermaid-type");
-      var type = sel ? sel.value : "graph TD";
+      var type = sel ? sel.value : "flowchart TD";
       var ta = document.getElementById("mermaid-content");
       if (ta && MERMAID_PRESETS[type]) ta.value = MERMAID_PRESETS[type];
     };
+
+    window.syncUmlContent = function () {
+      var sel = document.getElementById("uml-type");
+      var type = sel ? sel.value : "sequenceDiagram";
+      var ta = document.getElementById("uml-content");
+      if (ta && UML_PRESETS[type]) ta.value = UML_PRESETS[type];
+    };
+
     var mmSel = document.getElementById("mermaid-type");
     if (mmSel) mmSel.addEventListener("change", window.syncMermaidContent);
+
+    var umlSel = document.getElementById("uml-type");
+    if (umlSel) umlSel.addEventListener("change", window.syncUmlContent);
 
     window.runInsertMermaid = function () {
       var mtypeEl = document.getElementById("mermaid-type");
       var contentEl = document.getElementById("mermaid-content");
-      var type = mtypeEl ? mtypeEl.value : "graph TD";
+      var type = mtypeEl ? mtypeEl.value : "flowchart TD";
       var content = contentEl ? contentEl.value : "";
       var parts = content.split("\n");
       while (parts.length && !parts[0].trim()) parts.shift();
@@ -615,6 +630,32 @@ window.runInsertTable = function () {
       var dsl = "```mermaid\n" + type + "\n" + parts.join("\n") + "\n```\n";
       if (window.insertText) window.insertText("\n" + dsl);
       closeMermaidConfig();
+    };
+
+    // ===== Диалог настройки UML =====
+    window.openUmlConfig = function () {
+      document.getElementById("uml-config-overlay").style.display = "block";
+    };
+    window.closeUmlConfig = function () {
+      document.getElementById("uml-config-overlay").style.display = "none";
+    };
+
+    window.runInsertUml = function () {
+      var utypeEl = document.getElementById("uml-type");
+      var contentEl = document.getElementById("uml-content");
+      var type = utypeEl ? utypeEl.value : "sequenceDiagram";
+      var content = contentEl ? contentEl.value : "";
+      var parts = content.split("\n");
+      while (parts.length && !parts[0].trim()) parts.shift();
+      while (parts.length && !parts[parts.length - 1].trim()) parts.pop();
+      if (type.indexOf("nomnoml:") === 0) {
+        var dsl = "```nomnoml\n" + parts.join("\n") + "\n```\n";
+        if (window.insertText) window.insertText("\n" + dsl);
+      } else {
+        var dsl = "```mermaid\n" + type + "\n" + parts.join("\n") + "\n```\n";
+        if (window.insertText) window.insertText("\n" + dsl);
+      }
+      closeUmlConfig();
     };
 // ===== Диалог настройки Chart.js =====
 var CHART_SERIES_INDEX = 0;

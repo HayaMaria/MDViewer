@@ -171,6 +171,16 @@
       border-radius: 0 !important;
     }
 
+    /* Nomnoml-диаграммы */
+    #preview .nomnoml-diagram svg {
+      background: transparent !important;
+      max-width: 100%;
+      height: auto;
+    }
+    #preview .nomnoml-diagram {
+      margin: 8px 0;
+    }
+
     /* ===== Светлая тема ===== */
 /* Mermaid-схемы — прозрачный фон (сливается со страницей) */
     #preview .mermaid svg {

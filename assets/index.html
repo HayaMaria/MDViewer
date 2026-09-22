@@ -456,6 +456,7 @@ title: Навыки
     <div class="fmt-sep"></div>
     <div class="fmt-group">
       <button class="fmt-btn" title="Mermaid-диаграмма" onclick="openMermaidConfig()">◇</button>
+      <button class="fmt-btn" title="UML-диаграмма" onclick="openUmlConfig()">◉</button>
       <button class="fmt-btn" title="Chart.js график" onclick="openChartConfig()">📊</button>
     </div>
   </div>
@@ -669,19 +670,12 @@ title: Навыки
       </div>
       <div style="padding:16px;overflow-y:auto;">
         <div>
-          <label style="font-weight:bold;display:block;margin-bottom:4px;">Тип диаграммы</label>
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Направление графа</label>
           <select id="mermaid-type" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
-            <option value="graph TD">Блок-схема сверху вниз (graph TD)</option>
-            <option value="graph LR">Блок-схема слева направо (graph LR)</option>
-            <option value="graph BT">Блок-схема снизу вверх (graph BT)</option>
-            <option value="graph RL">Блок-схема справа налево (graph RL)</option>
-            <option value="flowchart TD">Граф сверху вниз (flowchart TD)</option>
-            <option value="flowchart LR">Граф слева направо (flowchart LR)</option>
-            <option value="sequenceDiagram">Диаграмма последовательности</option>
-            <option value="pie">Круговая диаграмма (pie)</option>
-            <option value="timeline">Временная линия (timeline)</option>
-            <option value="classDiagram">Диаграмма классов</option>
-            <option value="stateDiagram">Диаграмма состояний</option>
+            <option value="flowchart TD">Сверху вниз (flowchart TD)</option>
+            <option value="flowchart BT">Снизу вверх (flowchart BT)</option>
+            <option value="flowchart LR">Слева направо (flowchart LR)</option>
+            <option value="flowchart RL">Справа налево (flowchart RL)</option>
           </select>
         </div>
         <div style="margin-top:12px;">
@@ -693,6 +687,50 @@ title: Навыки
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
         <button onclick="closeMermaidConfig()" style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
         <button onclick="runInsertMermaid()" style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Вставить</button>
+      </div>
+    </div>
+  </div>
+
+<!-- ===== Модальное окно "Настройка UML диаграммы" ===== -->
+  <div id="uml-config-overlay" style="display:none;position:fixed;top:40px;left:10px;z-index:9999;">
+    <div style="background:var(--bg);color:var(--fg);width:380px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:1em;font-weight:bold;">
+        <span>Настройка UML диаграммы</span>
+        <button onclick="closeUmlConfig()" style="background:none;border:none;color:var(--fg);font-size:1.4em;cursor:pointer;padding:0;line-height:1;">&times;</button>
+      </div>
+      <div style="padding:16px;overflow-y:auto;">
+        <div>
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Тип диаграммы</label>
+          <select id="uml-type" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);">
+            <optgroup label="Mermaid UML">
+              <option value="sequenceDiagram">Диаграмма последовательности</option>
+              <option value="classDiagram">Диаграмма классов</option>
+              <option value="stateDiagram">Диаграмма состояний</option>
+              <option value="timeline">Временная линия</option>
+            </optgroup>
+            <optgroup label="Nomnoml UML">
+              <option value="nomnoml:useCase">Варианты использования (Use Case)</option>
+              <option value="nomnoml:activity">Деятельности (Activity)</option>
+              <option value="nomnoml:component">Компонентов (Component)</option>
+              <option value="nomnoml:package">Пакетов (Package)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-weight:bold;display:block;margin-bottom:4px;">Содержимое диаграммы</label>
+          <textarea id="uml-content" rows="6" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);font-family:Consolas,monospace;font-size:12px;resize:vertical;">
+    participant A as Пользователь
+    participant B as Сервер
+    A->>B: Запрос
+    B-->>A: Ответ</textarea>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:#888;">
+          Для Nomnoml-диаграмм используйте синтаксис: <code>[Актор] -> (Действие)</code>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">
+        <button onclick="closeUmlConfig()" style="padding:6px 16px;cursor:pointer;background:none;color:var(--fg);border:1px solid var(--border);border-radius:4px;">Отмена</button>
+        <button onclick="runInsertUml()" style="padding:6px 16px;cursor:pointer;background:#4c9aff;color:#fff;border:none;border-radius:4px;font-weight:bold;">Вставить</button>
       </div>
     </div>
   </div>
@@ -784,6 +822,8 @@ title: Навыки
     <span class="status-item status-save saved" id="status-save">Сохранено</span>
   </div>
 
+  <script src="lib/graphre.js"></script>
+  <script src="lib/nomnoml.min.js"></script>
   <script src="editor.bundle.js"></script>
   <script src="js/app.js"></script>
 </body>

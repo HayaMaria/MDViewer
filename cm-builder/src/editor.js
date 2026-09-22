@@ -187,6 +187,11 @@ const renderer = {
       const escaped = encodeURIComponent(text);
       return `<div id="${id}" data-chart-code="${escaped}" style="min-height:300px;"></div>`;
     }
+    if (lang === "nomnoml") {
+      const id = "nomnoml-" + (chartCounter++);
+      const escaped = encodeURIComponent(text);
+      return `<div id="${id}" class="nomnoml-diagram" data-nomnoml-code="${escaped}" style="min-height:100px;"></div>`;
+    }
     // Для остальных блоков — пусть marked обрабатывает стандартно (возвращаем null/false)
     return false;
   },
@@ -209,6 +214,19 @@ function updatePreview() {
     const code = decodeURIComponent(el.dataset.chartCode || "");
     if (code) {
       renderChart(code, el.id);
+    }
+  });
+
+  // Рендерим диаграммы nomnoml
+  document.querySelectorAll("#preview .nomnoml-diagram").forEach((el) => {
+    const code = decodeURIComponent(el.dataset.nomnomlCode || "");
+    if (code && typeof nomnoml !== "undefined") {
+      try {
+        const svgString = nomnoml.renderSvg(code, document);
+        el.innerHTML = svgString;
+      } catch (e) {
+        el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
+      }
     }
   });
 
