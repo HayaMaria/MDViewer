@@ -199,6 +199,7 @@ def show_export_settings_dialog():
     save_cfg = config.get('save', {
         'default_path': ''
     })
+    font_size = config.get('fontSize', 15)
     # Если путь не задан — используем Downloads
     if not export_cfg.get('save_path'):
         export_cfg['save_path'] = get_downloads_folder()
@@ -208,7 +209,7 @@ def show_export_settings_dialog():
     export_json = json.dumps(export_cfg)
     save_json = json.dumps(save_cfg)
     window.evaluate_js(
-        'openSettingsDialog(' + export_json + ', ' + save_json + ')'
+        'openSettingsDialog(' + export_json + ', ' + save_json + ', ' + str(font_size) + ')'
     )
 
 

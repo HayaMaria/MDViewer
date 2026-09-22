@@ -9,6 +9,18 @@ class Api:
     def __init__(self):
         self.current_file = None
 
+    def get_font_size(self):
+        """Вернуть сохранённый размер шрифта редактора"""
+        from config import load_font_size
+        return load_font_size()
+
+    def set_font_size(self, size):
+        """Сохранить размер шрифта и применить в редакторе"""
+        from config import save_font_size
+        save_font_size(size)
+        window = webview.active_window()
+        window.evaluate_js(f'setEditorFontSize({size})')
+
     def get_theme(self):
         """Вернуть сохранённую тему ('dark' или 'light')"""
         config = load_config()

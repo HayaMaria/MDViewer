@@ -21,6 +21,19 @@ def save_config(config):
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=2)
 
+def load_font_size():
+    """Загрузить размер шрифта редактора из конфига"""
+    config = load_config()
+    return config.get('fontSize', 15)
+
+
+def save_font_size(size):
+    """Сохранить размер шрифта редактора в конфиг"""
+    config = load_config()
+    config['fontSize'] = size
+    save_config(config)
+
+
 def load_export_config():
     """Загрузить настройки экспорта из конфига"""
     config = load_config()

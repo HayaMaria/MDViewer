@@ -59,26 +59,109 @@
 -- Разделитель --
 --- — горизонтальная черта во всю ширину
 
--- Схемы и диаграммы Mermaid --
+-- Схемы (графы Mermaid) --
 ```mermaid
-код диаграммы
+flowchart TD
+  A[Начало] --> B[Конец]
 ```
 
-  Позволяет рисовать прямо в документе:
-    • блок-схемы      — graph TD; A-->B;
-    • диаграммы       — sequenceDiagram
-    • графы           — flowchart
-    • круговые        — pie
-    • временные линии — timeline
+  Направление графа:
+    • flowchart TD  — сверху вниз
+    • flowchart BT  — снизу вверх
+    • flowchart LR  — слева направо
+    • flowchart RL  — справа налево
 
-  Пример простой блок-схемы:
+  Пример:
     ```mermaid
-    graph TD;
-      A[Начало] --> B{Выбор};
-      B -->|Да| C[Конец];
-      B -->|Нет| A;
+    flowchart TD
+      A[Начало] --> B{Условие}
+      B -- Да --> C[Действие]
+      B -- Нет --> D[Отмена]
     ```
-  (каждая строка — элемент диаграммы на языке Mermaid)
+
+-- UML-диаграммы (Mermaid) --
+```mermaid
+sequenceDiagram
+  A->>B: Сообщение
+```
+
+  • последовательности — sequenceDiagram
+    ```mermaid
+    sequenceDiagram
+      participant A as User
+      participant B as Server
+      A->>B: Request
+      B-->>A: Response
+    ```
+
+  • классов — classDiagram
+    ```mermaid
+    classDiagram
+      class Animal {
+        +String name
+        +eat()
+      }
+      class Dog {
+        +bark()
+      }
+      Dog <|-- Animal
+    ```
+
+  • состояний — stateDiagram
+    ```mermaid
+    stateDiagram
+      [*] --> Idle
+      Idle --> Running
+      Running --> [*]
+    ```
+
+  • временные линии — timeline
+    ```mermaid
+    timeline
+      title History
+      2020: Launch
+      2021: Growth
+      2022: Leader
+    ```
+
+-- UML-диаграммы (Nomnoml) --
+```nomnoml
+[Актор] -> (Действие)
+```
+
+  • варианты использования (Use Case)
+    ```nomnoml
+    [User]
+    [Admin]
+    [User] -> [Login]
+    [User] -> [View]
+    [Admin] -> [Manage]
+    ```
+
+  • деятельности (Activity)
+    ```nomnoml
+    [start] -> [Step 1]
+    [Step 1] -> [Step 2]
+    [Step 2] -> [end]
+    ```
+
+  • компонентов (Component)
+    ```nomnoml
+    [Client] <-> [API]
+    [API] <-> [Service A]
+    [API] <-> [Service B]
+    [Service A] <-> [(DB)]
+    [Service B] <-> [(DB)]
+    ```
+
+  • пакетов (Package)
+    ```nomnoml
+    [Client Layer]
+    [Business Logic]
+    [Data Layer]
+    [Client Layer] <-> [Business Logic]
+    [Business Logic] <-> [Data Layer]
+    ```
 
 -- Графики Chart.js --
 ```chart

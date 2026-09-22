@@ -421,6 +421,14 @@ let view = new EditorView({
 // Если data-theme не совпадает с темой в config (например, после applyTheme),
 // app.js вызовет setEditorTheme через checkTheme — это надёжно отработает.
 
+// ===== Функция для установки размера шрифта редактора (вызывается из Python/JS) =====
+window.setEditorFontSize = function (size) {
+  const content = view.contentDOM;
+  if (content) {
+    content.style.fontSize = size + "px";
+  }
+};
+
 // Сразу показываем превью при запуске
 updatePreview();
 

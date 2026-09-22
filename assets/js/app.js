@@ -73,6 +73,12 @@
         window.pywebview.api.get_theme().then(function (theme) {
           applyTheme(theme === 'dark');
         });
+        // Загружаем размер шрифта редактора
+        window.pywebview.api.get_font_size().then(function (size) {
+          if (typeof window.setEditorFontSize === "function") {
+            window.setEditorFontSize(size);
+          }
+        });
       } else {
         setTimeout(checkTheme, 100);
       }
@@ -366,7 +372,7 @@
     };
   
 
-    window.openSettingsDialog = function (s, d) {
+    window.openSettingsDialog = function (s, d, fs) {
       var e = typeof s === "string" ? JSON.parse(s) : s;
       var v = typeof d === "string" ? JSON.parse(d) : d;
       var a = document.querySelectorAll("#settings-overlay input[name=settings-mode]");
@@ -375,6 +381,13 @@
       for (var i = 0; i < b.length; i++) b[i].checked = b[i].value === e.theme;
       document.getElementById("settings-export-path").value = e.save_path || "";
       document.getElementById("settings-md-path").value = (v && v.default_path) || "";
+      // Устанавливаем размер шрифта
+      var size = parseInt(fs, 10) || 15;
+      document.getElementById("settings-font-size").value = size;
+      document.getElementById("settings-font-size-value").textContent = size + "px";
+      if (typeof window.setEditorFontSize === "function") {
+        window.setEditorFontSize(size);
+      }
       document.getElementById("settings-overlay").style.display = "flex";
     };
     window.closeSettingsDialog = function () {
@@ -392,12 +405,22 @@
       var m = document.querySelector("#settings-overlay input[name=settings-mode]:checked");
       var t = document.querySelector("#settings-overlay input[name=settings-theme]:checked");
       var themeVal = t ? t.value : "current";
-      if (window.pywebview && window.pywebview.api)
-        window.pywebview.api.save_export_settings(JSON.stringify({
-          mode: m ? m.value : "full", theme: themeVal,
-          save_path: document.getElementById("settings-export-path").value,
-          md_path: document.getElementById("settings-md-path").value
-        })).then(function () { closeSettingsDialog(); });
+      var fontSize = parseInt(document.getElementById("settings-font-size").value, 10) || 15;
+      if (window.pywebview && window.pywebview.api) {
+        // Сначала сохраняем размер шрифта
+        window.pywebview.api.set_font_size(fontSize).then(function () {
+          // Затем сохраняем настройки экспорта
+          window.pywebview.api.save_export_settings(JSON.stringify({
+            mode: m ? m.value : "full", theme: themeVal,
+            save_path: document.getElementById("settings-export-path").value,
+            md_path: document.getElementById("settings-md-path").value
+          })).then(function () {
+            closeSettingsDialog();
+          });
+        });
+      } else {
+        closeSettingsDialog();
+      }
     };
     window.openExportAsDialog = function () {
       if (window.pywebview && window.pywebview.api)
@@ -831,3 +854,18 @@ window.runInsertChart = function () {
   }
   closeChartConfig();
 };
+
+// ===== Слушатель для ползунка размера шрифта (предпросмотр в реальном времени) =====
+(function bindFontSizeSlider() {
+  var slider = document.getElementById("settings-font-size");
+  var valueDisplay = document.getElementById("settings-font-size-value");
+  if (slider && valueDisplay) {
+    slider.addEventListener("input", function () {
+      var size = parseInt(this.value, 10) || 15;
+      valueDisplay.textContent = size + "px";
+      if (typeof window.setEditorFontSize === "function") {
+        window.setEditorFontSize(size);
+      }
+    });
+  }
+})();
