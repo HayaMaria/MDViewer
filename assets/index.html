@@ -418,10 +418,6 @@ title: Навыки
 <!-- ===== Панель форматирования Markdown ===== -->
   <div id="fmt-bar">
     <div class="fmt-group">
-      <button class="fmt-btn" id="fmt-mode-btn" title="Смешанный режим форматирования" onclick="cycleFormatMode()">⇄</button>
-    </div>
-    <div class="fmt-sep"></div>
-    <div class="fmt-group">
       <button class="fmt-btn" title="Жирный" onclick="toggleBold()"><b>B</b></button>
       <button class="fmt-btn" title="Курсив" onclick="toggleItalic()"><i>I</i></button>
       <button class="fmt-btn" title="Зачёркнутый" onclick="toggleStrikethrough()"><s>S</s></button>
@@ -819,7 +815,7 @@ title: Навыки
     <span class="status-item" id="status-cursor">
       <span class="label">Строка:</span>
       <span class="value" id="status-line">1</span>
-      <span class="label">, Столбец:</span>
+      <span class="label">, Символ:</span>
       <span class="value" id="status-col">1</span>
     </span>
     <span class="status-item" id="status-file">

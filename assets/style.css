@@ -370,11 +370,6 @@
       background: var(--toolbar-btn-active);
     }
 
-    .fmt-btn.active {
-      background: var(--toolbar-btn-active);
-      box-shadow: inset 0 0 0 1px var(--border);
-    }
-
     .fmt-btn b { font-weight: 700; }
     .fmt-btn i { font-style: italic; }
     .fmt-btn s { text-decoration: line-through; }

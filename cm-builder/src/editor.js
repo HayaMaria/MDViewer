@@ -624,86 +624,24 @@ window.getRenderedBodyHTML = function () {
   return marked.parse(view.state.doc.toString());
 };
 // ===== Функции форматирования Markdown (панель инструментов) =====
-// ===== Режим форматирования (toggle/wrap/unwrap) =====
-window.formatMode = 'toggle';
-
-window.cycleFormatMode = function () {
-  if (window.formatMode === 'toggle') window.formatMode = 'wrap';
-  else if (window.formatMode === 'wrap') window.formatMode = 'unwrap';
-  else window.formatMode = 'toggle';
-  var btn = document.getElementById('fmt-mode-btn');
-  if (btn) {
-    var labels = {
-      toggle: { icon: '\u21C4', title: '\u0421\u043C\u0435\u0448\u0430\u043D\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C \u0444\u043E\u0440\u043C\u0430\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044F' },
-      wrap: { icon: '\u2295', title: '\u0422\u043E\u043B\u044C\u043A\u043E \u0434\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0444\u043E\u0440\u043C\u0430\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435' },
-      unwrap: { icon: '\u2296', title: '\u0422\u043E\u043B\u044C\u043A\u043E \u0441\u043D\u044F\u0442\u044C \u0444\u043E\u0440\u043C\u0430\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435' }
-    };
-    var info = labels[window.formatMode] || labels.toggle;
-    btn.innerHTML = info.icon;
-    btn.title = info.title;
-    btn.className = 'fmt-btn' + (window.formatMode !== 'toggle' ? ' active' : '');
-  }
-};
-
-function smartToggleFormat(text, before, after, mode) {
-  if (typeof text !== 'string' || !text) return { toggled: false, text: text || '' };
-  mode = mode || 'toggle';
-  var bEsc = before.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var aEsc = after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var pairRe = new RegExp(bEsc + '([\\s\\S]*?)' + aEsc, 'g');
-  var parts = [], lastIdx = 0, foundPair = false, m;
-  while ((m = pairRe.exec(text)) !== null) {
-    foundPair = true;
-    if (m && m.index > lastIdx) {
-      var plain = text.slice(lastIdx, m.index);
-      var ls = (plain && plain.match(/^(\s*)/) || ['', ''])[1];
-      var rs = (plain && plain.match(/(\s*)$/) || ['', ''])[1];
-      var mid = plain.slice(ls.length, plain.length - rs.length);
-      if (mode === 'unwrap') {
-        parts.push(plain); // не оборачиваем непарный текст
-      } else {
-        if (mid.length) { parts.push(ls + before + mid + after + rs); }
-        else { parts.push(plain); }
-      }
-    }
-    if (m && m[1] !== undefined) {
-      if (mode === 'wrap') {
-        parts.push(m[0]); // сохраняем оригинальную обёртку
-      } else {
-        parts.push(m[1]); // снимаем обёртку (toggle/unwrap)
-      }
-    }
-    lastIdx = pairRe.lastIndex;
-  }
-  if (foundPair) {
-    if (lastIdx < text.length) {
-      var rest = text.slice(lastIdx);
-      if (mode === 'unwrap') {
-        parts.push(rest); // не оборачиваем
-      } else {
-        var ls = (rest && rest.match(/^(\s*)/) || ['', ''])[1];
-        var rs = (rest && rest.match(/(\s*)$/) || ['', ''])[1];
-        var mid = rest.slice(ls.length, rest.length - rs.length);
-        if (mid.length) { parts.push(ls + before + mid + after + rs); }
-        else { parts.push(rest); }
-      }
-    }
-    return { toggled: true, text: parts.join('') };
-  }
-  // Нет ни одной пары
-  if (mode === 'unwrap') return { toggled: false, text: text };
-  if (mode === 'wrap') return { toggled: false, text: text };
-  // toggle: проверим, обёрнут ли весь текст снаружи
-  var outerRe = new RegExp('^' + bEsc + '([\\s\\S]*)' + aEsc + '$');
-  var outerMatch = text.match(outerRe);
-  if (outerMatch && outerMatch[1] !== undefined) {
-    return { toggled: true, text: outerMatch[1] };
-  }
-  return { toggled: false, text: text };
-}
   /**
- * Оборачивает выделенный текст в маркеры форматирования.
- * Работает построчно для многострочного выделения.
+ * Единый умный toggle форматирования.
+ *
+ * Правила:
+ * 1. Если весь выделенный текст полностью обёрнут (начинается с before и
+ *    заканчивается after, и первая же найденная пара съедает весь текст) —
+ *    снять ВСЕ обёртки этого типа (внешнюю и внутренние).
+ * 2. Если выделенный текст содержит смешанные обёртки этого типа —
+ *    ориентируемся на то, с какого символа пользователь начал выделение
+ *    (sel.anchor):
+ *      - если он является маркером before — снять все внутренние обёртки
+ *        и обернуть весь текст снаружи
+ *      - если НЕ маркер — просто снять все внутренние обёртки этого типа
+ * 3. Если обёрток этого типа нет совсем — просто обернуть текст снаружи.
+ *
+ * Важно: для маркеров * и ~ используется негативный lookahead/lookbehind,
+ * чтобы не перепутать * с ** (italic с bold) и ~ с ~~.
+ * Другие типы обёрток (** и т.п.) не трогаются.
  */
 function wrapSelection(before, after) {
   view.focus();
@@ -720,10 +658,11 @@ function wrapSelection(before, after) {
     }
   }
   var text = from === to ? '' : doc.sliceString(from, to);
+  // Пустое выделение — просто вставляем маркеры, курсор между ними
   if (!text) {
-    var insert = before + after;
+    var emptyInsert = before + after;
     view.dispatch({
-      changes: { from: from, to: to, insert: insert },
+      changes: { from: from, to: to, insert: emptyInsert },
       selection: { anchor: from + before.length, head: from + before.length },
       scrollIntoView: true,
       userEvent: 'input.formatting'
@@ -731,87 +670,62 @@ function wrapSelection(before, after) {
     view.focus();
     return;
   }
-  var mode = window.formatMode || 'toggle';
-  // Многострочный режим
-  if (text.indexOf('\n') !== -1) {
-    var lines = text.split('\n');
-    var resultLines = [];
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      var st = smartToggleFormat(line, before, after, mode);
-      if (mode === 'toggle') {
-        if (st.toggled) { resultLines.push(st.text); }
-        else if (line.length > 0) { resultLines.push(before + line + after); }
-        else { resultLines.push(''); }
-      } else if (mode === 'wrap') {
-        if (st.toggled) { resultLines.push(st.text); }
-        else if (line.length === 0) { resultLines.push(''); }
-        else { resultLines.push(before + line + after); }
-      } else if (mode === 'unwrap') {
-        if (st.toggled) { resultLines.push(st.text); }
-        else { resultLines.push(line); }
-      }
-    }
-    var insert = resultLines.join('\n');
-    view.dispatch({
-      changes: { from: from, to: to, insert: insert },
-      selection: { anchor: from, head: from + insert.length },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-    view.focus();
-    return;
+  // Экранируем спецсимволы для regex
+  var bEsc = before.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var aEsc = after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Для маркеров * и ~ нужен негативный lookahead/lookbehind,
+  // чтобы не задеть ** (bold) или ~~ (strikethrough)
+  var needsLookaround = (before === '*' || before === '~');
+  var beforeRe = needsLookaround ? '(?<!\\' + before + ')' + bEsc : bEsc;
+  var afterRe = needsLookaround ? aEsc + '(?!\\' + after + ')' : aEsc;
+  // Регекс для поиска всех before...after пар
+  var pairRe = new RegExp(beforeRe + '([\\s\\S]*?)' + afterRe, 'g');
+  // Снимаем все обёртки данного типа — получаем «чистый» текст
+  var cleaned = text.replace(pairRe, '$1');
+  // Проверяем, был ли текст целиком обёрнут снаружи:
+  // первая же пара начинается на позиции 0 и заканчивается на length
+  var firstWrapRe = new RegExp('^' + beforeRe + '([\\s\\S]*?)' + afterRe);
+  var firstMatch = text.match(firstWrapRe);
+  var fullyWrapped = firstMatch && firstMatch.index === 0
+                      && firstMatch.index + firstMatch[0].length === text.length;
+  // Есть ли в тексте хоть одна пара данного типа?
+  var hasPairs = cleaned !== text;
+  // Определяем, начал ли пользователь выделение с маркера
+  // Используем sel.anchor (начальная точка выделения) и направление:
+  //   - forward  (sel.anchor === sel.from): проверяем before на anchor
+  //   - reverse  (sel.anchor === sel.to):   проверяем after ПЕРЕД anchor
+  var isForward = sel.anchor === sel.from;
+  var anchorAtMarker = !sel.empty;
+  if (isForward) {
+    anchorAtMarker = sel.anchor + before.length <= doc.length
+      && doc.sliceString(sel.anchor, sel.anchor + before.length) === before;
+  } else {
+    anchorAtMarker = sel.anchor >= after.length
+      && doc.sliceString(sel.anchor - after.length, sel.anchor) === after;
   }
-  // Однострочный
-  var st = smartToggleFormat(text, before, after, mode);
-  if (mode === 'toggle') {
-    if (st.toggled) {
-      view.dispatch({
-        changes: { from: from, to: to, insert: st.text },
-        selection: { anchor: from, head: from + st.text.length },
-        scrollIntoView: true,
-        userEvent: 'input.formatting'
-      });
+  var insert;
+  if (fullyWrapped) {
+    // Весь текст обёрнут как единое целое → снимаем всё
+    insert = cleaned;
+  } else if (hasPairs) {
+    // Смешанный текст — ориентируемся на то, где начал пользователь
+    if (anchorAtMarker) {
+      // Пользователь начал выделение с маркера → обернуть чистое
+      insert = before + cleaned + after;
     } else {
-      var insert = before + text + after;
-      var anchor = from + before.length;
-      var head = from + insert.length - after.length;
-      view.dispatch({
-        changes: { from: from, to: to, insert: insert },
-        selection: { anchor: anchor, head: text ? head : anchor },
-        scrollIntoView: true,
-        userEvent: 'input.formatting'
-      });
+      // Пользователь начал с обычного текста → просто снять внутренние обёртки
+      insert = cleaned;
     }
-  } else if (mode === 'wrap') {
-    if (st.toggled) {
-      view.dispatch({
-        changes: { from: from, to: to, insert: st.text },
-        selection: { anchor: from, head: from + st.text.length },
-        scrollIntoView: true,
-        userEvent: 'input.formatting'
-      });
-    } else if (text.length > 0) {
-      var insert = before + text + after;
-      var anchor = from + before.length;
-      var head = from + insert.length - after.length;
-      view.dispatch({
-        changes: { from: from, to: to, insert: insert },
-        selection: { anchor: anchor, head: text ? head : anchor },
-        scrollIntoView: true,
-        userEvent: 'input.formatting'
-      });
-    }
-  } else if (mode === 'unwrap') {
-    if (st.toggled) {
-      view.dispatch({
-        changes: { from: from, to: to, insert: st.text },
-        selection: { anchor: from, head: from + st.text.length },
-        scrollIntoView: true,
-        userEvent: 'input.formatting'
-      });
-    }
+  } else {
+    // Нет ни одной пары данного типа → просто обернуть
+    insert = before + text + after;
   }
+  view.dispatch({
+    changes: { from: from, to: to, insert: insert },
+    selection: { anchor: from, head: from + insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.formatting'
+  });
   view.focus();
 }
 
