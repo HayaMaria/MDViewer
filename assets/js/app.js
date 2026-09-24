@@ -83,7 +83,132 @@
         setTimeout(checkTheme, 100);
       }
     })();
-  
+
+// ===== Стилизация скроллбаров через JS (для pywebview) =====
+(function initScrollbarStyles() {
+  var style = document.createElement('style');
+  style.textContent =
+    '::-webkit-scrollbar { width: 10px !important; height: 10px !important; }' +
+    '::-webkit-scrollbar-track { background: #282c34 !important; }' +
+    '::-webkit-scrollbar-thumb { background: #555 !important; border-radius: 5px !important; border: 2px solid #282c34 !important; background-clip: padding-box !important; }' +
+    '::-webkit-scrollbar-thumb:hover { background: #777 !important; }' +
+    '::-webkit-scrollbar-corner { background: #282c34 !important; }' +
+    '[data-theme="light"] ::-webkit-scrollbar-track { background: #ffffff !important; }' +
+    '[data-theme="light"] ::-webkit-scrollbar-thumb { background: #ccc !important; border-color: #ffffff !important; }' +
+    '[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaa !important; }' +
+    '[data-theme="light"] ::-webkit-scrollbar-corner { background: #ffffff !important; }';
+  document.head.appendChild(style);
+  console.log('[Scrollbar] styles injected');
+})();
+
+// ===== Drag-to-Resize Splitter (Absolute positioning) =====
+(function initSplitter() {
+  try {
+    console.log('[Splitter] init');
+    var splitter = document.getElementById('splitter');
+    if (!splitter) { console.warn('[Splitter] splitter not found'); return; }
+    var editorPanel = document.getElementById('editor');
+    var previewPanel = document.getElementById('preview');
+    var container = document.querySelector('.container');
+    if (!editorPanel || !previewPanel || !container) {
+      console.warn('[Splitter] missing elements'); return;
+    }
+
+    console.log('[Splitter] all elements found');
+
+    function forceCMResize() {
+      // Просто просим CM6 пересчитать внутреннюю разметку
+      if (window.__cmView && window.__cmView.requestMeasure) {
+        window.__cmView.requestMeasure();
+      }
+    }
+
+    var isDragging = false;
+    var startX = 0;
+    var startPercent = 0;
+    var startTotalW = 0;
+    var currentPercent = 50; // текущая позиция в процентах
+
+    // Загружаем позицию
+    function loadSplitterPos() {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.get_splitter_pos().then(function (pos) {
+          if (pos && pos > 0) applySplitterPos(pos);
+        }).catch(function () {});
+      }
+    }
+    function saveSplitterPos(percent) {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.set_splitter_pos(percent);
+      }
+    }
+
+    // Установить позицию редактора в процентах через flex
+    function applySplitterPos(percent) {
+      percent = Math.max(3, Math.min(97, percent));
+      currentPercent = percent;
+      editorPanel.style.flex = '0 0 ' + percent + '%';
+      forceCMResize();
+    }
+
+    splitter.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      isDragging = true;
+      startX = e.clientX;
+      startPercent = currentPercent;
+      startTotalW = container.getBoundingClientRect().width;
+      console.log('[Splitter] mousedown, startX:', startX, 'startPercent:', startPercent, 'totalW:', startTotalW);
+
+      splitter.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      function onMouseMove(e2) {
+        if (!isDragging) return;
+        var delta = e2.clientX - startX;
+        // Используем ЗАКЭШИРОВАННУЮ ширину контейнера (не меняется во время драга)
+        var deltaPercent = (delta / startTotalW) * 100;
+        var newPercent = startPercent + deltaPercent;
+        newPercent = Math.max(3, Math.min(97, newPercent));
+
+        editorPanel.style.flex = '0 0 ' + newPercent + '%';
+        currentPercent = newPercent;
+        forceCMResize();
+        console.log('[Splitter] mousemove percent:', newPercent.toFixed(1), 'delta:', delta);
+      }
+
+      function onMouseUp(e2) {
+        if (!isDragging) return;
+        isDragging = false;
+        console.log('[Splitter] mouseup');
+        splitter.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // Сохраняем позицию
+        saveSplitterPos(Math.round(currentPercent));
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    // Загружаем позицию
+    var check = setInterval(function () {
+      if (window.pywebview && window.pywebview.api) {
+        loadSplitterPos();
+        clearInterval(check);
+      }
+    }, 200);
+
+    console.log('[Splitter] ready');
+  } catch(err) {
+    console.error('[Splitter] error:', err);
+  }
+})();
+
 // ===== Статус-бар (строка состояния) =====
     var isModified = false;
 

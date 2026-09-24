@@ -41,21 +41,80 @@
     }
 
     .panel {
-      flex: 1;
       overflow: auto;
+      min-width: 0;
+      flex: 1 1 0;
     }
 
     #editor {
+      flex: 0 0 50%;  /* начальное значение, переопределяется JS */
       height: 100%;
-      width: 100%;
+      min-width: 0;
     }
 
     #preview {
-      padding: 24px 32px;
-      border-left: 2px solid var(--preview-border);
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 24px 16px;
       line-height: 1.6;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      overflow-x: hidden;
     }
 
+    /* ===== Splitter ===== */
+    .splitter {
+      flex: 0 0 8px;
+      cursor: col-resize;
+      z-index: 10;
+      user-select: none;
+      background: var(--border);
+      transition: background 0.15s ease;
+      position: relative;
+    }
+
+    .splitter:hover,
+    .splitter.active {
+      background: #666;
+    }
+
+    /* Splitter — тёмная тема */
+    [data-theme="dark"] .splitter { background: #444; }
+    [data-theme="dark"] .splitter:hover,
+    [data-theme="dark"] .splitter.active { background: #666; }
+
+    /* Splitter — светлая тема */
+    [data-theme="light"] .splitter { background: #ccc; }
+    [data-theme="light"] .splitter:hover,
+    [data-theme="light"] .splitter.active { background: #999; }
+
+    /* Принуждаем CodeMirror подстраиваться под ширину родителя */
+    #editor .cm-editor,
+    #editor .cm-scroller,
+    #editor .cm-content {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      width: 100% !important;
+    }
+    #editor .cm-content {
+      box-sizing: border-box !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-all !important;
+      padding-right: 32px !important;
+    }
+    #editor .cm-line {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-all !important;
+    }
+    #editor .cm-scroller {
+      overflow-x: hidden !important;
+      contain: none !important;
+      scrollbar-gutter: stable !important;
+    }
     #preview h1 {
       font-size: 2em;
       border-bottom: 1px solid var(--border);
@@ -94,14 +153,19 @@
       border-radius: 4px;
       font-family: "Consolas", "Courier New", monospace;
       font-size: 0.9em;
+      word-break: break-all;
+      overflow-wrap: anywhere;
     }
 
     #preview pre {
       background: var(--pre-bg);
       padding: 16px;
       border-radius: 6px;
-      overflow-x: auto;
       margin: 12px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      max-width: 100%;
     }
 
     #preview pre code {
@@ -121,6 +185,9 @@
       border-collapse: collapse;
       margin: 12px 0;
       width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+      word-break: break-all;
     }
 
     #preview th,
@@ -128,6 +195,7 @@
       border: 1px solid var(--table-border);
       padding: 8px 12px;
       text-align: left;
+      word-break: break-all;
     }
 
     #preview th {
@@ -157,12 +225,26 @@
       border-top: 1px solid var(--hr-border);
       margin: 16px 0;
     }
-/* Mermaid-схемы — убираем фоновый прямоугольник (сливается со страницей) */
-    #preview .mermaid svg rect:first-child {
-      fill: transparent !important;
+
+    /* Запрещаем вылезать за границы только блочным элементам */
+    #preview img,
+    #preview pre,
+    #preview table,
+    #preview blockquote,
+    #preview iframe,
+    #preview video {
+      max-width: 100% !important;
     }
+    #preview svg:not([id^='chart-']) {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+
+/* Mermaid-схемы — прозрачный фон (сливается со страницей) + адаптивная ширина */
     #preview .mermaid svg {
       background: transparent !important;
+      max-width: 100% !important;
+      height: auto !important;
     }
     /* Убираем фон и паддинг у обёртки pre.mermaid */
     #preview pre.mermaid {
@@ -182,9 +264,11 @@
     }
 
     /* ===== Светлая тема ===== */
-/* Mermaid-схемы — прозрачный фон (сливается со страницей) */
+/* Mermaid-схемы — адаптивная ширина (дубль для светлой темы) */
     #preview .mermaid svg {
       background: transparent !important;
+      max-width: 100% !important;
+      height: auto !important;
     }
     /* Убираем фон и паддинг у обёртки pre.mermaid — она не должна создавать видимую область */
     #preview pre.mermaid {

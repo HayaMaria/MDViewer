@@ -21,6 +21,16 @@ class Api:
         window = webview.active_window()
         window.evaluate_js(f'setEditorFontSize({size})')
 
+    def get_splitter_pos(self):
+        """Вернуть сохранённую позицию разделителя (ширина редактора в %)"""
+        from config import load_splitter_pos
+        return load_splitter_pos()
+
+    def set_splitter_pos(self, percent):
+        """Сохранить позицию разделителя (ширина редактора в %)"""
+        from config import save_splitter_pos
+        save_splitter_pos(percent)
+
     def get_theme(self):
         """Вернуть сохранённую тему ('dark' или 'light')"""
         config = load_config()

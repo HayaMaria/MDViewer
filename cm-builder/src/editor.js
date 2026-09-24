@@ -418,6 +418,9 @@ let view = new EditorView({
   parent: document.getElementById("editor"),
 });
 
+// Экспортируем view для внешнего доступа (нужно для принудительного пересчёта размеров)
+window.__cmView = view;
+
 // Если data-theme не совпадает с темой в config (например, после applyTheme),
 // app.js вызовет setEditorTheme через checkTheme — это надёжно отработает.
 

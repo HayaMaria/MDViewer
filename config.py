@@ -34,6 +34,19 @@ def save_font_size(size):
     save_config(config)
 
 
+def load_splitter_pos():
+    """Загрузить позицию разделителя (ширина редактора в %) из конфига"""
+    config = load_config()
+    return config.get('splitterPos', 50)
+
+
+def save_splitter_pos(percent):
+    """Сохранить позицию разделителя (ширина редактора в %) в конфиг"""
+    config = load_config()
+    config['splitterPos'] = percent
+    save_config(config)
+
+
 def load_export_config():
     """Загрузить настройки экспорта из конфига"""
     config = load_config()
