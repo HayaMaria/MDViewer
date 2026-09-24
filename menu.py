@@ -145,9 +145,6 @@ def change_theme():
     save_config(config)
     window = webview.active_window()
     window.evaluate_js(f'applyTheme({str(new_dark).lower()})')
-    # Обновляем заголовок окна (тёмный/светлый)
-    from titlebar import set_titlebar_theme
-    set_titlebar_theme(window, new_dark)
 
 
 

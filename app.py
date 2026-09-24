@@ -1,7 +1,6 @@
 import webview,os,logging
 import config,menu
 from api import Api
-from titlebar import set_titlebar_theme
 
 assets_dir = os.path.join(os.path.dirname(__file__),"assets")
 
@@ -41,14 +40,9 @@ if __name__ == '__main__':
         height=800,
         resizable=True,
     )
-
-    # startup-функция: применяем тему к заголовку окна после создания GUI
-    def _apply_startup_theme():
-        """Применить сохранённую тему к заголовку окна при запуске."""
-        is_dark = config.load_config().get('theme', 'dark') == 'dark'
-        set_titlebar_theme(window, is_dark)
+    # Сохраняем окно в api для WinAPI-вызовов (не зависеть от active_window)
+    api._window = window
 
     webview.start(
-        func=_apply_startup_theme,
         debug=True,          # Включаем debug → AreBrowserAcceleratorKeysEnabled = True → Tab доходит до JS
     )

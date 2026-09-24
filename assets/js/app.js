@@ -52,6 +52,11 @@
       }
 
       // Код Mermaid не трогаем — CSS делает фон прозрачным
+
+      // Обновляем цвет заголовка окна (WinAPI — тёмный/светлый)
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.apply_titlebar_theme) {
+        window.pywebview.api.apply_titlebar_theme(dark);
+      }
     }
 
     // ===== Единая функция рендеринга nomnoml (учитывает тему) =====

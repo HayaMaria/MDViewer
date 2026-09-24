@@ -118,6 +118,16 @@ class Api:
         """Смена темы с сохранением в конфиг"""
         change_theme()
 
+    def apply_titlebar_theme(self, dark):
+        """Применить тёмный/светлый заголовок окна через WinAPI (вызов из JS)"""
+        from titlebar import set_titlebar_theme
+        # Используем сохранённый window (гарантированно существующий)
+        if hasattr(self, '_window') and self._window is not None:
+            set_titlebar_theme(self._window, dark)
+        else:
+            window = webview.active_window()
+            set_titlebar_theme(window, dark)
+
     def about_program(self):
         """О программе"""
         show_about()
