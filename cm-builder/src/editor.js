@@ -202,11 +202,51 @@ marked.use({ renderer });
 function updatePreview() {
   const content = view.state.doc.toString();
   const html = marked.parse(content);
-  document.getElementById("preview").innerHTML = html;
+  const previewEl = document.getElementById("preview");
 
-  // Рендерим схемы Mermaid
+  // ===== Сохранение позиции при перерисовке =====
+  // innerHTML-перезапись уничтожает элементы: пока диаграммы (mermaid/chart)
+  // не отрендерились, высота превью резко падает, браузер клампит scrollTop
+  // к верху, а после рендера высота возвращается — позиция уже потеряна.
+  // Якорим верхний видимый блок и возвращаем его на место после стабилизации;
+  // на это время синхронизация заморожена (syncScroll.settling), чтобы
+  // служебные кламп-прокрутки не дёргали вторую панель.
+  const settleId = ++syncScrollSettle.id;
+  syncScroll.settling = true;
+  syncScroll.lock = null;
+
+  // Якорь ДО перезаписи: блок у верхней кромки + его смещение от кромки
+  let anchorIndex = 0;
+  let anchorOffset = 0;
+  const panelTop = previewEl.getBoundingClientRect().top;
+  const oldKids = Array.from(previewEl.children);
+  for (let i = 0; i < oldKids.length; i++) {
+    if (oldKids[i].getBoundingClientRect().top <= panelTop) anchorIndex = i;
+    else break;
+  }
+  if (oldKids.length && anchorIndex < oldKids.length) {
+    anchorOffset = oldKids[anchorIndex].getBoundingClientRect().top - panelTop;
+  }
+
+  previewEl.innerHTML = html;
+
+  // Промежуточное восстановление (диаграммы ещё не отрендерены): держим
+  // якорный блок у кромки, чтобы не мигало и не улетало к верху
+  const kidsMid = Array.from(previewEl.children);
+  if (kidsMid.length && anchorIndex < kidsMid.length) {
+    const contentTop = kidsMid[anchorIndex].getBoundingClientRect().top
+      - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
+    syncScroll.lock = "editor"; // эхо этой установки не должно синхронизировать редактор
+    previewEl.scrollTop = Math.max(0, contentTop - anchorOffset);
+  }
+
+  // Рендерим схемы Mermaid: run() вызывается синхронно (как раньше), его
+  // Promise ждём в стабилизации ниже (ошибки глотаем)
+  let mermaidDone = Promise.resolve();
   if (document.querySelector(".mermaid")) {
-    mermaid.run({ querySelector: ".mermaid" });
+    try {
+      mermaidDone = Promise.resolve(mermaid.run({ querySelector: ".mermaid" })).catch(() => { });
+    } catch (e) { }
   }
 
   // Рендерим графики Chart.js
@@ -227,6 +267,31 @@ function updatePreview() {
         el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
       }
     }
+  });
+
+  // Стабилизация: после mermaid.run и двух кадров раскладки (canvas графиков,
+  // layout) возвращаем якорный блок точно на место и снимаем заморозку.
+  // Токен settleId: применяется только самая последняя перестройка.
+  mermaidDone.then(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (settleId !== syncScrollSettle.id) return;
+      const kids = Array.from(previewEl.children);
+      if (kids.length && anchorIndex < kids.length) {
+        const contentTop = kids[anchorIndex].getBoundingClientRect().top
+          - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
+        const desired = Math.max(0, contentTop - anchorOffset);
+        if (Math.abs(desired - previewEl.scrollTop) > 0.5) {
+          // Эхо этой установки погасится в обработчике (lock !== 'preview');
+          // если события не будет — подчистим lock следующим кадром
+          syncScroll.lock = "editor";
+          previewEl.scrollTop = desired;
+        }
+      }
+      syncScroll.settling = false;
+      requestAnimationFrame(() => {
+        if (syncScroll.lock === "editor") syncScroll.lock = null;
+      });
+    }));
   });
 
   // Обработчики для ссылок в браузер
@@ -440,7 +505,11 @@ window.setEditorFontSize = function (size) {
 const syncScroll = {
   enabled: true, // переключается кнопкой на тулбаре (см. app.js -> toggleSyncScroll)
   lock: null,    // 'editor' | 'preview' — чья программная установка scrollTop сейчас «летит»
+  settling: false, // заморозка на время перестройки превью (см. updatePreview)
 };
+
+// Токен последней перестройки превью (защита от гонки при быстрой печати)
+const syncScrollSettle = { id: 0 };
 
 const syncPreviewEl = document.getElementById("preview");
 const syncEditorWrapEl = document.getElementById("editor");
@@ -476,6 +545,9 @@ function attachSyncScroll(sourceEl, sourceName) {
   if (!sourceEl) return;
   sourceEl.addEventListener("scroll", function () {
     if (!syncScroll.enabled) return;
+    // Заморозка на время перестройки превью (updatePreview): клампы и
+    // служебные прокрутки не должны дёргать вторую панель
+    if (syncScroll.settling) return;
     const targetEl = sourceName === "editor" ? syncPreviewEl : getEditorScrollEl();
     if (!targetEl || targetEl === sourceEl) return;
     // «Эхо»: событие вызвано нашей же программной установкой scrollTop в другой панели
