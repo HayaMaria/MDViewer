@@ -198,11 +198,75 @@ const renderer = {
 };
 marked.use({ renderer });
 
+// ===== Производительность превью: debounce + кэш диаграмм =====
+// Превью перестраивается через innerHTML, поэтому на каждое нажатие клавиши
+// заново отрисовывались ВСЕ диаграммы (mermaid/nomnoml) — на документах со
+// множеством схем ввод «зависал». Теперь:
+//  1) перестройка откладывается до паузы в наборе (debounce);
+//  2) отрендеренные SVG кэшируются по сигнатуре (тип + исходник [+ тема]) и
+//     восстанавливаются мгновенно, а mermaid.run запускается только для
+//     новых/изменённых диаграмм.
+
+// Задержка до перестройки превью после последнего изменения текста (мс)
+const PREVIEW_DEBOUNCE_MS = 200;
+// Максимальное число записей в кэше SVG диаграмм (ограничение памяти)
+const DIAGRAM_CACHE_LIMIT = 100;
+
+let previewTimer = null;
+let lastPreviewContent = null;
+
+// Кэш отрендеренных SVG: сигнатура -> innerHTML контейнера
+const diagramSVGCache = new Map();
+
+function getPreviewTheme() {
+  return document.documentElement.getAttribute("data-theme") || "dark";
+}
+
+// Mermaid инициализируется один раз с фиксированной палитрой и не зависит от
+// темы приложения, поэтому тема в его сигнатуру не входит. nomnoml
+// перекрашивается под тему — тема входит в его сигнатуру.
+function makeDiagramSignature(kind, code, withTheme) {
+  return kind + "\u0000" + (withTheme ? getPreviewTheme() + "\u0000" : "") + code;
+}
+
+function svgCacheGet(key) {
+  const svg = diagramSVGCache.get(key);
+  if (svg !== undefined) {
+    // LRU: переносим запись в конец очереди вытеснения
+    diagramSVGCache.delete(key);
+    diagramSVGCache.set(key, svg);
+  }
+  return svg;
+}
+
+function svgCachePut(key, svg) {
+  diagramSVGCache.delete(key);
+  diagramSVGCache.set(key, svg);
+  while (diagramSVGCache.size > DIAGRAM_CACHE_LIMIT) {
+    diagramSVGCache.delete(diagramSVGCache.keys().next().value);
+  }
+}
+
+// Отложенное обновление превью: пока пользователь печатает, перестройка не
+// выполняется; запускается через PREVIEW_DEBOUNCE_MS после последней правки
+function schedulePreviewUpdate() {
+  if (previewTimer !== null) clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    previewTimer = null;
+    updatePreview();
+  }, PREVIEW_DEBOUNCE_MS);
+}
+
 // Функция обновления превью
-function updatePreview() {
+// force=true — пропустить проверку «текст не менялся» (нужно после выхода из
+// режима просмотра HTML, когда DOM превью был очищен извне)
+function updatePreview(force) {
   // В режиме просмотра HTML-файла превью занято iframe — не перерисовываем
   if (window.__htmlMode) return;
   const content = view.state.doc.toString();
+  // Текст не менялся с прошлой перестройки — перерисовывать нечего
+  if (!force && content === lastPreviewContent) return;
+  lastPreviewContent = content;
   const html = marked.parse(content);
   const previewEl = document.getElementById("preview");
 
@@ -242,29 +306,63 @@ function updatePreview() {
     previewEl.scrollTop = Math.max(0, contentTop - anchorOffset);
   }
 
-  // Рендерим схемы Mermaid: run() вызывается синхронно (как раньше), его
-  // Promise ждём в стабилизации ниже (ошибки глотаем)
+  // Рендерим схемы Mermaid: неизменённые диаграммы восстанавливаем из кэша SVG
+  // мгновенно, а mermaid.run({nodes}) запускаем только для новых/изменённых
+  // блоков (точечный рендер). Promise ждём в стабилизации ниже (ошибки глотаем).
   let mermaidDone = Promise.resolve();
-  if (document.querySelector(".mermaid")) {
+  const pendingMermaid = [];
+  previewEl.querySelectorAll(".mermaid").forEach((el) => {
+    const key = makeDiagramSignature("mermaid", el.dataset.code || "", false);
+    const cached = svgCacheGet(key);
+    if (cached !== undefined) {
+      el.innerHTML = cached;
+    } else {
+      pendingMermaid.push(el);
+    }
+  });
+  if (pendingMermaid.length) {
     try {
-      mermaidDone = Promise.resolve(mermaid.run({ querySelector: ".mermaid" })).catch(() => { });
+      mermaidDone = Promise.resolve(mermaid.run({ nodes: pendingMermaid }))
+        .catch(() => { })
+        .then(() => {
+          // Кэшируем то, что mermaid успел отрендерить (включая SVG «ошибки
+          // синтаксиса»); необработанные блоки будут отрендерены при следующем
+          // вызове. Признак успешного рендера — наличие <svg>.
+          pendingMermaid.forEach((el) => {
+            const svg = el.innerHTML;
+            if (svg && svg.indexOf("<svg") !== -1) {
+              svgCachePut(makeDiagramSignature("mermaid", el.dataset.code || "", false), svg);
+            }
+          });
+        });
     } catch (e) { }
   }
 
-  // Рендерим графики Chart.js
-  document.querySelectorAll("#preview [id^='chart-']").forEach((el) => {
+  // Рендерим графики Chart.js (пересоздаются после innerHTML-перезаписи;
+  // уничтожение прежних инстансов выполняет сам renderChart, см. charts.js)
+  previewEl.querySelectorAll("[id^='chart-']").forEach((el) => {
     const code = decodeURIComponent(el.dataset.chartCode || "");
     if (code) {
       renderChart(code, el.id);
     }
   });
 
-  // Рендерим диаграммы nomnoml
-  document.querySelectorAll("#preview .nomnoml-diagram").forEach((el) => {
+  // Рендерим диаграммы nomnoml: неизменённые восстанавливаем из кэша SVG
+  previewEl.querySelectorAll(".nomnoml-diagram").forEach((el) => {
     const code = decodeURIComponent(el.dataset.nomnomlCode || "");
-    if (code && typeof window.renderNomnoml === "function") {
+    if (!code) return;
+    const key = makeDiagramSignature("nomnoml", code, true);
+    const cached = svgCacheGet(key);
+    if (cached !== undefined) {
+      el.innerHTML = cached;
+      return;
+    }
+    if (typeof window.renderNomnoml === "function") {
       try {
         window.renderNomnoml(el, code);
+        if (el.innerHTML.indexOf("<svg") !== -1) {
+          svgCachePut(key, el.innerHTML);
+        }
       } catch (e) {
         el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
       }
@@ -483,7 +581,9 @@ let view = new EditorView({
     readOnlyCompartment.of(EditorState.readOnly.of(false)),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        updatePreview();
+        // Превью перестраиваем с задержкой (debounce) — иначе на документах со
+        // множеством диаграмм ввод блокируется на каждой клавише
+        schedulePreviewUpdate();
         // Помечаем как несохранённое при изменении документа
         if (window.markUnsaved) window.markUnsaved();
       }
@@ -607,7 +707,9 @@ updatePreview();
 
 // Принудительная перерисовка MD-превью извне (нужна после выхода из режима
 // просмотра HTML-файла; сама updatePreview глобально недоступна из-за минификации)
-window.forceUpdatePreview = updatePreview;
+// force=true: DOM превью мог быть очищен извне — проверку «текст не менялся»
+// игнорируем
+window.forceUpdatePreview = () => updatePreview(true);
 
 // Функция для получения текста из редактора (вызывается из Python)
 window.getEditorContent = () => view.state.doc.toString();
@@ -617,6 +719,8 @@ window.setEditorContent = (text) => {
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: text },
   });
+  // При загрузке файла превью показываем сразу, не дожидаясь debounce
+  updatePreview();
 };
 // ===== Функции для меню (вызываются из Python через evaluate_js) =====
 

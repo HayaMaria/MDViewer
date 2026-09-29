@@ -99,6 +99,13 @@ window.renderChart = renderChart;
 export function renderChart(codeText, containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
+  // Уничтожаем прежний инстанс графика на этом контейнере (иначе при каждой
+  // перерисовке превью остаются «висящие» инстансы с ResizeObserver'ами)
+  try {
+    const oldCanvas = container.querySelector('canvas');
+    const oldChart = oldCanvas && window.Chart ? window.Chart.getChart(oldCanvas) : null;
+    if (oldChart) oldChart.destroy();
+  } catch (e) { }
   const parsed = parseChartDSL(codeText);
   if (!parsed) {
     container.innerHTML = '<p style="color:#ff6b6b;">Ошибка: не удалось разобрать данные графика</p>';
