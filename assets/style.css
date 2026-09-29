@@ -393,6 +393,16 @@
       background: var(--toolbar-btn-active);
     }
 
+    /* Включённое состояние кнопок-переключателей тулбара (синхронная прокрутка) */
+    .menu-btn.toggled-on {
+      color: #4c9aff;
+      background: var(--toolbar-btn-hover);
+    }
+
+    .menu-btn.toggled-on:hover {
+      background: var(--toolbar-btn-active);
+    }
+
     .menu-btn svg {
       display: block;
     }

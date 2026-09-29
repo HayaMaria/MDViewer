@@ -31,6 +31,16 @@ class Api:
         from config import save_splitter_pos
         save_splitter_pos(percent)
 
+    def get_sync_scroll(self):
+        """Вернуть состояние синхронной прокрутки (True/False)"""
+        from config import load_sync_scroll
+        return load_sync_scroll()
+
+    def set_sync_scroll(self, enabled):
+        """Сохранить состояние синхронной прокрутки (True/False)"""
+        from config import save_sync_scroll
+        save_sync_scroll(enabled)
+
     def get_theme(self):
         """Вернуть сохранённую тему ('dark' или 'light')"""
         config = load_config()

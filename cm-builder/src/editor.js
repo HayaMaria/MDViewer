@@ -432,6 +432,91 @@ window.setEditorFontSize = function (size) {
   }
 };
 
+// ===== Синхронная прокрутка редактора и превью =====
+// Пропорциональный режим: переносится доля прокрутки
+// (scrollTop / (scrollHeight - clientHeight)) в обе стороны.
+// Защита от зацикливания (editor -> preview -> editor): флаг источника
+// синхронизации + сброс через requestAnimationFrame + гистерезис 1px.
+const syncScroll = {
+  enabled: true, // переключается кнопкой на тулбаре (см. app.js -> toggleSyncScroll)
+  lock: null,    // 'editor' | 'preview' — чья программная установка scrollTop сейчас «летит»
+};
+
+const syncPreviewEl = document.getElementById("preview");
+const syncEditorWrapEl = document.getElementById("editor");
+
+// Доля прокрутки source, пересчитанная в scrollTop для target.
+// Возвращает null, если целевая панель прокручивать нечего.
+function syncScrollTargetTop(sourceEl, targetEl) {
+  const targetMax = targetEl.scrollHeight - targetEl.clientHeight;
+  if (targetMax <= 0) return null;
+  const sourceMax = sourceEl.scrollHeight - sourceEl.clientHeight;
+  const ratio = sourceMax > 0 ? sourceEl.scrollTop / sourceMax : 0;
+  return ratio * targetMax;
+}
+
+// Какой элемент реально прокручивает редактор.
+// ВАЖНО: .cm-editor не ограничен по высоте и растёт по контенту, поэтому
+// вертикально скроллится внешний контейнер #editor (класс .panel,
+// overflow: auto), а не .cm-scroller (view.scrollDOM). Проверяем оба:
+// переполнение в один момент времени есть только у реального скроллера.
+function getEditorScrollEl() {
+  const cm = view.scrollDOM;
+  if (cm && cm.scrollHeight > cm.clientHeight + 1) return cm;
+  if (syncEditorWrapEl && syncEditorWrapEl.scrollHeight > syncEditorWrapEl.clientHeight + 1) {
+    return syncEditorWrapEl;
+  }
+  return cm;
+}
+
+// Подписка source-панели: при её прокрутке двигаем target-панель.
+// sourceEl — элемент, к которому привязан слушатель: scroll не всплывает,
+// событие придёт только от элемента, который реально прокрутил пользователь.
+function attachSyncScroll(sourceEl, sourceName) {
+  if (!sourceEl) return;
+  sourceEl.addEventListener("scroll", function () {
+    if (!syncScroll.enabled) return;
+    const targetEl = sourceName === "editor" ? syncPreviewEl : getEditorScrollEl();
+    if (!targetEl || targetEl === sourceEl) return;
+    // «Эхо»: событие вызвано нашей же программной установкой scrollTop в другой панели
+    if (syncScroll.lock && syncScroll.lock !== sourceName) {
+      syncScroll.lock = null;
+      return;
+    }
+    const target = syncScrollTargetTop(sourceEl, targetEl);
+    if (target === null) return;
+    if (Math.abs(targetEl.scrollTop - target) < 1) return;
+    syncScroll.lock = sourceName;
+    targetEl.scrollTop = target;
+    // Снимаем блокировку после эхо-события (scroll-события приходят до rAF в этом же кадре)
+    requestAnimationFrame(() => {
+      if (syncScroll.lock === sourceName) syncScroll.lock = null;
+    });
+  });
+}
+
+attachSyncScroll(view.scrollDOM, "editor");
+attachSyncScroll(syncEditorWrapEl, "editor"); // внешний контейнер — реальный скроллер редактора
+attachSyncScroll(syncPreviewEl, "preview");
+
+// Включение/выключение синхронной прокрутки (вызывается из app.js / Python)
+window.setSyncScrollEnabled = function (enabled) {
+  syncScroll.enabled = !!enabled;
+  syncScroll.lock = null;
+  // При включении сразу подводим превью к текущей позиции редактора
+  if (syncScroll.enabled && syncPreviewEl) {
+    const sourceEl = getEditorScrollEl();
+    if (sourceEl) {
+      const target = syncScrollTargetTop(sourceEl, syncPreviewEl);
+      if (target !== null) syncPreviewEl.scrollTop = target;
+    }
+  }
+};
+
+window.isSyncScrollEnabled = function () {
+  return syncScroll.enabled;
+};
+
 // Сразу показываем превью при запуске
 updatePreview();
 

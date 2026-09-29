@@ -47,6 +47,19 @@ def save_splitter_pos(percent):
     save_config(config)
 
 
+def load_sync_scroll():
+    """Загрузить состояние синхронной прокрутки из конфига"""
+    config = load_config()
+    return config.get('syncScroll', True)
+
+
+def save_sync_scroll(enabled):
+    """Сохранить состояние синхронной прокрутки в конфиг"""
+    config = load_config()
+    config['syncScroll'] = bool(enabled)
+    save_config(config)
+
+
 def load_export_config():
     """Загрузить настройки экспорта из конфига"""
     config = load_config()

@@ -84,6 +84,12 @@
             window.setEditorFontSize(size);
           }
         });
+        // Загружаем состояние синхронной прокрутки
+        window.pywebview.api.get_sync_scroll().then(function (enabled) {
+          if (typeof window.applySyncScrollState === 'function') {
+            window.applySyncScrollState(enabled !== false && enabled !== 'false');
+          }
+        });
       } else {
         setTimeout(checkTheme, 100);
       }
@@ -390,6 +396,37 @@
           window.pywebview.api.toggle_theme();
         }
       };
+
+      // ===== Кнопка синхронной прокрутки (тулбар, вкл/выкл) =====
+      var syncScrollOn = true;
+
+      function updateSyncScrollButton() {
+        var btn = document.getElementById('sync-scroll-btn');
+        if (btn) {
+          if (syncScrollOn) btn.classList.add('toggled-on');
+          else btn.classList.remove('toggled-on');
+          btn.title = 'Синхронная прокрутка: ' + (syncScrollOn ? 'вкл' : 'выкл');
+        }
+      }
+
+      // Применить состояние синхронной прокрутки (из кнопки тулбара или из конфига при старте)
+      window.applySyncScrollState = function (enabled) {
+        syncScrollOn = !!enabled;
+        // setSyncScrollEnabled объявлен в editor.bundle.js (грузится раньше app.js)
+        if (typeof window.setSyncScrollEnabled === 'function') {
+          window.setSyncScrollEnabled(syncScrollOn);
+        }
+        updateSyncScrollButton();
+      };
+
+      window.toggleSyncScroll = function () {
+        window.applySyncScrollState(!syncScrollOn);
+        if (window.pywebview && window.pywebview.api) {
+          window.pywebview.api.set_sync_scroll(syncScrollOn);
+        }
+      };
+
+      updateSyncScrollButton();
 
       function closeAllDropdowns() {
         document.querySelectorAll('.menu-dropdown.open').forEach(function (d) {
