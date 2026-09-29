@@ -2,7 +2,7 @@ import { EditorView, basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
-import { StateField, StateEffect, RangeSetBuilder } from "@codemirror/state";
+import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
 import { defaultKeymap, historyKeymap, undo, redo, indentMore, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import mermaid from "mermaid";
@@ -200,6 +200,8 @@ marked.use({ renderer });
 
 // Функция обновления превью
 function updatePreview() {
+  // В режиме просмотра HTML-файла превью занято iframe — не перерисовываем
+  if (window.__htmlMode) return;
   const content = view.state.doc.toString();
   const html = marked.parse(content);
   const previewEl = document.getElementById("preview");
@@ -458,6 +460,16 @@ function updateCursorPosition(view) {
     window.updateStatusBarCursor(lineNumber, colNumber);
   }
 }
+// ===== Режим «только чтение» (включается при просмотре HTML-файлов) =====
+const readOnlyCompartment = new Compartment();
+
+// Включить/выключить запрет редактирования (вызывается из app.js)
+window.setEditorReadOnly = function (readOnly) {
+  view.dispatch({
+    effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(!!readOnly)),
+  });
+};
+
 // Создаём редактор
 // Светлая тема для CodeMirror — И selection, И active line через EditorView.theme()
 let view = new EditorView({
@@ -468,6 +480,7 @@ let view = new EditorView({
     oneDark,
     keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
     searchHighlightExt,
+    readOnlyCompartment.of(EditorState.readOnly.of(false)),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         updatePreview();
@@ -591,6 +604,10 @@ window.isSyncScrollEnabled = function () {
 
 // Сразу показываем превью при запуске
 updatePreview();
+
+// Принудительная перерисовка MD-превью извне (нужна после выхода из режима
+// просмотра HTML-файла; сама updatePreview глобально недоступна из-за минификации)
+window.forceUpdatePreview = updatePreview;
 
 // Функция для получения текста из редактора (вызывается из Python)
 window.getEditorContent = () => view.state.doc.toString();

@@ -1,12 +1,16 @@
 import os,json,webview
 from config import load_config,save_config
+from htmlfile import read_html_text,prepare_html_for_preview,inject_fit_width_style
 api=None
 
 def new_document():
     """Новый документ — очищает редактор, сбрасывает current_file, обновляет заголовок"""
-    window = webview.active_window()
-    window.evaluate_js('setEditorContent("")')
     global api
+    window = webview.active_window()
+    # Выходим из режима просмотра HTML-файла, если он был активен
+    window.evaluate_js('exitHtmlMode()')
+    api.html_mode = False
+    window.evaluate_js('setEditorContent("")')
     api.current_file = None
     window.title = 'MD Viewer — Новый документ'
     window.evaluate_js('setFileName("Новый документ")')
@@ -15,14 +19,23 @@ def new_document():
 
 
 def open_file():
-    """Открыть файл — диалог → читаем .md → устанавливаем в редактор"""
+    """Открыть файл — диалог: .md → в редактор, .html/.htm → в превью (только чтение)"""
     window = webview.active_window()
     result = window.create_file_dialog(
         webview.FileDialog.OPEN,
-        file_types=['Markdown files (*.md)', 'All files (*.*)']
+        # «All files» первым — по умолчанию видны все файлы (.md/.html не серые);
+        # конкретные фильтры доступны в выпадающем списке «Тип файлов»
+        file_types=['All files (*.*)', 'Markdown files (*.md)', 'HTML files (*.html;*.htm)']
     )
     if result:
         filepath = result[0]
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext in ('.html', '.htm'):
+            open_html_file(filepath)
+            return
+        # Выходим из режима просмотра HTML (если был активен), затем открываем .md
+        window.evaluate_js('exitHtmlMode()')
+        api.html_mode = False
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -36,10 +49,32 @@ def open_file():
             window.evaluate_js(f'alert("Ошибка открытия файла: {str(e)}")')
 
 
+def open_html_file(filepath):
+    """Открыть HTML-файл в режиме только чтения: справа iframe с файлом, слева пустой редактор"""
+    window = webview.active_window()
+    try:
+        raw = read_html_text(filepath)
+        html = prepare_html_for_preview(filepath, raw)
+        # Вписываем содержимое по ширине панели — без горизонтального скролла
+        html = inject_fit_width_style(html)
+        basename = os.path.basename(filepath)
+        window.evaluate_js(f'loadHtmlPreview({json.dumps(html)}, {json.dumps(basename)})')
+        api.current_file = None  # HTML-файл защищён от перезаписи через Ctrl+S
+        api.html_mode = True
+        window.title = f'MD Viewer — {basename}'
+        window.evaluate_js(f'setFileName({json.dumps(basename)})')
+    except Exception as e:
+        window.evaluate_js(f'alert("Ошибка открытия HTML-файла: {str(e)}")')
+
+
 
 def save_file():
     """Сохранить — перезаписать текущий файл или автосохранить в папку по умолчанию из конфига"""
     window = webview.active_window()
+    if getattr(api, 'html_mode', False):
+        # HTML-файл открыт только для просмотра — нельзя затереть его содержимым редактора
+        window.evaluate_js('alert("HTML-файл открыт в режиме только для чтения — сохранение недоступно")')
+        return
     content = window.evaluate_js('getEditorContent()')
     if api.current_file:
         try:
@@ -73,6 +108,10 @@ def save_file():
 def save_file_as():
     """Сохранить как — диалог выбора места сохранения"""
     window = webview.active_window()
+    if getattr(api, 'html_mode', False):
+        # HTML-файл открыт только для просмотра — сохранение в этом режиме недоступно
+        window.evaluate_js('alert("HTML-файл открыт в режиме только для чтения — сохранение недоступно")')
+        return
     content = window.evaluate_js('getEditorContent()')
     result = window.create_file_dialog(
         webview.FileDialog.SAVE,

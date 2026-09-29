@@ -52,6 +52,10 @@ MERMAID_INIT_ARGS_DARK = (
 def export_html_full():
     """Экспорт HTML (полный) — библиотеки встроены, работает без интернета"""
     window = webview.active_window()
+    # В режиме просмотра HTML-файла экспортировать нечего (MD-редактор пуст)
+    if window.evaluate_js('!!window.__htmlMode'):
+        window.evaluate_js('alert("Экспорт недоступен: HTML-файл открыт в режиме только для чтения")')
+        return
     body_html = window.evaluate_js('getRenderedBodyHTMLExport()')
     styles = window.evaluate_js('getEditorStyles()')
 
@@ -128,6 +132,10 @@ def export_html_full():
 def export_html_minimal():
     """Экспорт HTML (минимальный) — библиотеки с CDN, лёгкий файл, нужен интернет"""
     window = webview.active_window()
+    # В режиме просмотра HTML-файла экспортировать нечего (MD-редактор пуст)
+    if window.evaluate_js('!!window.__htmlMode'):
+        window.evaluate_js('alert("Экспорт недоступен: HTML-файл открыт в режиме только для чтения")')
+        return
     body_html = window.evaluate_js('getRenderedBodyHTMLExport()')
     styles = window.evaluate_js('getEditorStyles()')
 
@@ -216,6 +224,10 @@ def export_html_custom(mode, theme, save_path):
 def export_html(save_path='', export_theme='current', mode='full'):
     """Экспорт HTML — единая функция с поддержкой темы и пути сохранения"""
     window = webview.active_window()
+    # В режиме просмотра HTML-файла экспортировать нечего (MD-редактор пуст)
+    if window.evaluate_js('!!window.__htmlMode'):
+        window.evaluate_js('alert("Экспорт недоступен: HTML-файл открыт в режиме только для чтения")')
+        return
     body_html = window.evaluate_js('getRenderedBodyHTMLExport()')
     styles = window.evaluate_js('getEditorStyles()')
 

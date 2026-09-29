@@ -8,6 +8,8 @@ from export import export_html_full,export_html_minimal,export_html_default,expo
 class Api:
     def __init__(self):
         self.current_file = None
+        # True, когда открыт HTML-файл (режим просмотра, только чтение)
+        self.html_mode = False
 
     def get_font_size(self):
         """Вернуть сохранённый размер шрифта редактора"""

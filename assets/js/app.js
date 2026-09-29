@@ -165,6 +165,9 @@
     splitter.addEventListener('mousedown', function (e) {
       e.preventDefault();
       isDragging = true;
+      // Блокируем pointer-events у iframe — иначе он перехватывает mousemove
+      // при перетаскивании и разделитель «глючит»
+      document.body.classList.add('splitter-drag');
       startX = e.clientX;
       startPercent = currentPercent;
       startTotalW = container.getBoundingClientRect().width;
@@ -191,6 +194,7 @@
       function onMouseUp(e2) {
         if (!isDragging) return;
         isDragging = false;
+        document.body.classList.remove('splitter-drag');
         console.log('[Splitter] mouseup');
         splitter.classList.remove('active');
         document.body.style.cursor = '';
@@ -1036,3 +1040,73 @@ window.runInsertChart = function () {
     });
   }
 })();
+
+// ===== Режим просмотра HTML-файла (только чтение) =====
+// HTML-файл показывается справа в изолированном iframe (srcdoc),
+// слева — пустой редактор, заблокированный от правок.
+window.__htmlMode = false;
+
+window.setReadOnlyStatus = function () {
+  var el = document.getElementById('status-save');
+  if (el) {
+    el.textContent = 'Только чтение';
+    el.className = 'status-item status-save readonly';
+  }
+};
+
+// Открыть HTML-файл в превью (вызывается из Python, menu.open_html_file)
+window.loadHtmlPreview = function (html, name) {
+  window.__htmlMode = true;
+  // Очищаем редактор, пока он ещё доступен для правок, затем блокируем
+  if (window.setEditorContent) window.setEditorContent('');
+  if (window.setEditorReadOnly) window.setEditorReadOnly(true);
+  // Панель форматирования Markdown для HTML-файла не имеет смысла
+  var fmtBar = document.getElementById('fmt-bar');
+  if (fmtBar) fmtBar.style.display = 'none';
+
+  var previewEl = document.getElementById('preview');
+  if (previewEl) {
+    previewEl.classList.add('html-mode');
+    previewEl.innerHTML = '';
+    var frame = document.createElement('iframe');
+    frame.className = 'html-view-frame';
+    frame.setAttribute('title', name || 'HTML');
+    // Без allow-same-origin: скрипты файла работают, но iframe получает
+    // непрозрачный origin и не имеет доступа к родителю и pywebview API
+    frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+    frame.srcdoc = html;
+    previewEl.appendChild(frame);
+  }
+
+  window.setFileName(name || 'document.html');
+  window.setReadOnlyStatus();
+};
+
+// Выйти из режима просмотра HTML (вызывается из Python; no-op вне html-режима)
+window.exitHtmlMode = function () {
+  if (!window.__htmlMode) return;
+  window.__htmlMode = false;
+  if (window.setEditorReadOnly) window.setEditorReadOnly(false);
+  var fmtBar = document.getElementById('fmt-bar');
+  if (fmtBar) fmtBar.style.display = '';
+  var previewEl = document.getElementById('preview');
+  if (previewEl) {
+    previewEl.classList.remove('html-mode');
+    previewEl.innerHTML = '';
+  }
+  // Возвращаем обычное MD-превью (updatePreview не глобален из-за минификации)
+  if (window.forceUpdatePreview) window.forceUpdatePreview();
+  window.markSaved();
+};
+
+// В html-режиме статусы «Сохранено/Не сохранено» не имеют смысла — держим «Только чтение»
+var _origMarkSaved = window.markSaved;
+window.markSaved = function () {
+  if (window.__htmlMode) { window.setReadOnlyStatus(); return; }
+  if (_origMarkSaved) _origMarkSaved();
+};
+var _origMarkUnsaved = window.markUnsaved;
+window.markUnsaved = function () {
+  if (window.__htmlMode) { window.setReadOnlyStatus(); return; }
+  if (_origMarkUnsaved) _origMarkUnsaved();
+};

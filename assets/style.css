@@ -799,4 +799,31 @@
     [data-theme="light"] .status-bar .status-save.unsaved {
       color: #e65100;
     }
+
+    .status-bar .status-save.readonly {
+      color: #999;
+    }
+
+    [data-theme="light"] .status-bar .status-save.readonly {
+      color: #777;
+    }
+
+    /* ===== Режим просмотра HTML-файла (только чтение) ===== */
+    #preview.html-mode {
+      padding: 0;
+      overflow: hidden; /* прокрутка — внутри iframe */
+    }
+
+    .html-view-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+    }
+
+    /* Во время перетаскивания разделителя iframe не должен перехватывать мышь */
+    body.splitter-drag iframe {
+      pointer-events: none;
+    }
   
