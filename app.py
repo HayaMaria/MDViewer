@@ -1,6 +1,7 @@
 import webview,os,logging
 import config,menu
 from api import Api
+from associate import register_file_associations, get_startup_file_path
 
 assets_dir = os.path.join(os.path.dirname(__file__),"assets")
 
@@ -26,6 +27,11 @@ if __name__ == '__main__':
     # Устанавливаем глобальную ссылку для обработчиков меню
     globals()['api'] = api
     menu.api = api
+    api._startup_file = get_startup_file_path()
+    try:
+        register_file_associations()
+    except OSError:
+        pass
 
     # Устанавливаем иконку окна
     icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')

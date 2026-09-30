@@ -90,6 +90,15 @@
             window.applySyncScrollState(enabled !== false && enabled !== 'false');
           }
         });
+        (function openPassedFile() {
+          if (typeof window.setEditorContent !== "function" || typeof window.loadHtmlPreview !== "function") {
+            setTimeout(openPassedFile, 50);
+            return;
+          }
+          if (window.pywebview.api.open_startup_file) {
+            window.pywebview.api.open_startup_file();
+          }
+        })();
       } else {
         setTimeout(checkTheme, 100);
       }

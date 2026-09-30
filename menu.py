@@ -3,10 +3,16 @@ from config import load_config,save_config
 from htmlfile import read_html_text,prepare_html_for_preview,inject_fit_width_style
 api=None
 
+def _window():
+    """Окно приложения: сохранённая ссылка надёжнее active_window при старте."""
+    if api is not None and getattr(api, '_window', None) is not None:
+        return api._window
+    return webview.active_window()
+
 def new_document():
     """Новый документ — очищает редактор, сбрасывает current_file, обновляет заголовок"""
     global api
-    window = webview.active_window()
+    window = _window()
     # Выходим из режима просмотра HTML-файла, если он был активен
     window.evaluate_js('exitHtmlMode()')
     api.html_mode = False
@@ -18,9 +24,33 @@ def new_document():
 
 
 
+def open_path(filepath):
+    """Открыть файл по пути: .html/.htm — превью, остальное — Markdown в редактор."""
+    if not filepath:
+        return
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext in ('.html', '.htm'):
+        open_html_file(filepath)
+        return
+    window = _window()
+    window.evaluate_js('exitHtmlMode()')
+    api.html_mode = False
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        escaped = json.dumps(content)
+        window.evaluate_js(f'setEditorContent({escaped})')
+        api.current_file = filepath
+        window.title = f'MD Viewer — {os.path.basename(filepath)}'
+        window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
+        window.evaluate_js('markSaved()')
+    except Exception as e:
+        window.evaluate_js(f'alert("Ошибка открытия файла: {str(e)}")')
+
+
 def open_file():
     """Открыть файл — диалог: .md → в редактор, .html/.htm → в превью (только чтение)"""
-    window = webview.active_window()
+    window = _window()
     result = window.create_file_dialog(
         webview.FileDialog.OPEN,
         # «All files» первым — по умолчанию видны все файлы (.md/.html не серые);
@@ -28,30 +58,12 @@ def open_file():
         file_types=['All files (*.*)', 'Markdown files (*.md)', 'HTML files (*.html;*.htm)']
     )
     if result:
-        filepath = result[0]
-        ext = os.path.splitext(filepath)[1].lower()
-        if ext in ('.html', '.htm'):
-            open_html_file(filepath)
-            return
-        # Выходим из режима просмотра HTML (если был активен), затем открываем .md
-        window.evaluate_js('exitHtmlMode()')
-        api.html_mode = False
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            escaped = json.dumps(content)
-            window.evaluate_js(f'setEditorContent({escaped})')
-            api.current_file = filepath
-            window.title = f'MD Viewer — {os.path.basename(filepath)}'
-            window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
-            window.evaluate_js('markSaved()')
-        except Exception as e:
-            window.evaluate_js(f'alert("Ошибка открытия файла: {str(e)}")')
+        open_path(result[0])
 
 
 def open_html_file(filepath):
     """Открыть HTML-файл в режиме только чтения: справа iframe с файлом, слева пустой редактор"""
-    window = webview.active_window()
+    window = _window()
     try:
         raw = read_html_text(filepath)
         html = prepare_html_for_preview(filepath, raw)

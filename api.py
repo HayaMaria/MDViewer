@@ -1,6 +1,6 @@
 import webview,webbrowser,threading,markdown,json
 from config import load_config,load_export_config,save_export_config
-from menu import new_document,open_file,save_file,save_file_as
+from menu import new_document,open_file,save_file,save_file_as,open_path as open_file_by_path
 from menu import exit_app,change_theme,show_about,show_shortcuts
 from menu import show_md_syntax,show_export_help,show_export_settings_dialog
 from export import export_html_full,export_html_minimal,export_html_default,export_html_custom
@@ -190,4 +190,12 @@ class Api:
         if result:
             return result[0]
         return ''
+
+    def open_startup_file(self):
+        """Открыть файл, переданный Проводником. Сразу возвращаемся в JS, чтение — в фоне."""
+        path = getattr(self, '_startup_file', None)
+        if not path:
+            return
+        self._startup_file = None
+        threading.Thread(target=lambda: open_file_by_path(path), daemon=True).start()
 

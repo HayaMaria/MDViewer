@@ -11,7 +11,7 @@ a = Analysis(
     datas=[
         (str(root / 'assets'), 'assets'),
     ],
-    hiddenimports=[],
+    hiddenimports=['associate', 'menu', 'htmlfile', 'export', 'titlebar', 'config'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
