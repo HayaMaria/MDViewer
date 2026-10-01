@@ -19,6 +19,7 @@ Ctrl+I / Cmd+I — Курсив
 Ctrl+U / Cmd+U — Подчёркнутый
 Ctrl+Shift+X / Cmd+Shift+X — Зачёркнутый
 Ctrl+` / Cmd+` — Инлайн-код
+Ctrl+Shift+Enter / Cmd+Shift+Enter — Пустая строка (видна в HTML)
 
 -- Навигация --
 Home / End — В начало / конец строки

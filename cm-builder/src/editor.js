@@ -289,6 +289,7 @@ const customKeyBindings = [
   { key: "Mod-Shift-x", run: () => { window.toggleStrikethrough(); return true; } },
   { key: "Mod-u", run: () => { window.toggleUnderline(); return true; } },
   { key: "Mod-`", run: () => { window.toggleInlineCode(); return true; } },
+  { key: "Mod-Shift-Enter", run: () => { window.insertBlankParagraph(); return true; } },
   {
     key: "Tab", run: () => {
       // Вставляем символ табуляции напрямую (надёжнее indentMore для markdown)
@@ -724,129 +725,285 @@ window.getSearchCursorPos = function () {
 };
 
 // ===== Функции форматирования Markdown (панель инструментов) =====
-/**
- * Единый умный toggle форматирования.
- *
- * Правила:
- * 1. Если весь выделенный текст полностью обёрнут (начинается с before и
- *    заканчивается after, и первая же найденная пара съедает весь текст) —
- *    снять ВСЕ обёртки этого типа (внешнюю и внутренние).
- * 2. Если выделенный текст содержит смешанные обёртки этого типа —
- *    ориентируемся на то, с какого символа пользователь начал выделение
- *    (sel.anchor):
- *      - если он является маркером before — снять все внутренние обёртки
- *        и обернуть весь текст снаружи
- *      - если НЕ маркер — просто снять все внутренние обёртки этого типа
- * 3. Если обёрток этого типа нет совсем — просто обернуть текст снаружи.
- *
- * Важно: для маркеров * и ~ используется негативный lookahead/lookbehind,
- * чтобы не перепутать * с ** (italic с bold) и ~ с ~~.
- * Другие типы обёрток (** и т.п.) не трогаются.
- */
-function wrapSelection(before, after) {
-  view.focus();
-  var sel = view.state.selection.main;
-  var from = sel.from, to = sel.to;
-  var doc = view.state.doc;
-  // Расширяем выделение на маркеры сразу за краями
-  if (!sel.empty) {
-    if (from >= before.length && doc.sliceString(from - before.length, from) === before) {
-      from -= before.length;
+// Инлайн-маркеры (**, *, ~~, `, <u>) ставятся отдельно на каждую строку
+// выделения: Markdown не продолжает выделение через пустую строку, заголовок
+// или пункт списка, поэтому обёртка всего блока целиком не работает.
+// Однородное выделение переключается; смешанное (часть текста уже
+// отформатирована) приводится к состоянию символа, с которого начато выделение.
+// Блочные команды (списки, цитата, заголовки) переключаются для всех строк
+// разом: если разметка есть у всех непустых строк — снимается, иначе
+// добавляется недостающим.
+
+// Блочный префикс строки, после которого начинается текст для инлайн-маркеров:
+// отступ, цитата, маркер списка (в т.ч. задачи), заголовок
+const INLINE_PREFIX_RE = /^(?:\s*>)*\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?(?:#{1,6}\s+)?/;
+// Префикс до маркера списка/заголовка: отступ и уровни цитаты
+const LEAD_RE = /^(?:\s*>)*\s*/;
+const HR_RE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
+const TABLE_ROW_RE = /^\s*\|/;
+const FENCE_RE = /^\s*(`{3,}|~{3,})/;
+
+// Маркеры из повторяющегося символа: допустимая длина серии символов.
+// Для * учитывается, что *** — это одновременно жирный и курсив.
+const RUN_MARKERS = {
+  '**': n => n >= 2,
+  '*': n => n === 1 || n >= 3,
+  '~~': n => n >= 2,
+  '`': n => n >= 1,
+};
+
+function isBlankLine(text) {
+  return /^(?:\s*>)*\s*$/.test(text);
+}
+
+// Блоки кода ``` / ~~~: пары номеров строк открывающего и закрывающего ограждения
+function codeBlocks(doc) {
+  const blocks = [];
+  let open = null, fence = '';
+  for (let n = 1; n <= doc.lines; n++) {
+    const m = FENCE_RE.exec(doc.line(n).text);
+    if (!m) continue;
+    if (open === null) {
+      open = n;
+      fence = m[1];
+    } else if (m[1][0] === fence[0] && m[1].length >= fence.length) {
+      blocks.push({ open, close: n });
+      open = null;
     }
-    if (to + after.length <= doc.length && doc.sliceString(to, to + after.length) === after) {
-      to += after.length;
-    }
   }
-  var text = from === to ? '' : doc.sliceString(from, to);
-  // Пустое выделение — просто вставляем маркеры, курсор между ними
-  if (!text) {
-    var emptyInsert = before + after;
-    view.dispatch({
-      changes: { from: from, to: to, insert: emptyInsert },
-      selection: { anchor: from + before.length, head: from + before.length },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-    view.focus();
-    return;
-  }
-  // Экранируем спецсимволы для regex
-  var bEsc = before.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var aEsc = after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Для маркеров * и ~ нужен негативный lookahead/lookbehind,
-  // чтобы не задеть ** (bold) или ~~ (strikethrough)
-  var needsLookaround = (before === '*' || before === '~');
-  var beforeRe = needsLookaround ? '(?<!\\' + before + ')' + bEsc : bEsc;
-  var afterRe = needsLookaround ? aEsc + '(?!\\' + after + ')' : aEsc;
-  // Регекс для поиска всех before...after пар
-  var pairRe = new RegExp(beforeRe + '([\\s\\S]*?)' + afterRe, 'g');
-  // Снимаем все обёртки данного типа — получаем «чистый» текст
-  var cleaned = text.replace(pairRe, '$1');
-  // Проверяем, был ли текст целиком обёрнут снаружи:
-  // первая же пара начинается на позиции 0 и заканчивается на length
-  var firstWrapRe = new RegExp('^' + beforeRe + '([\\s\\S]*?)' + afterRe);
-  var firstMatch = text.match(firstWrapRe);
-  var fullyWrapped = firstMatch && firstMatch.index === 0
-                      && firstMatch.index + firstMatch[0].length === text.length;
-  // Есть ли в тексте хоть одна пара данного типа?
-  var hasPairs = cleaned !== text;
-  // Определяем, начал ли пользователь выделение с маркера
-  // Используем sel.anchor (начальная точка выделения) и направление:
-  //   - forward  (sel.anchor === sel.from): проверяем before на anchor
-  //   - reverse  (sel.anchor === sel.to):   проверяем after ПЕРЕД anchor
-  var isForward = sel.anchor === sel.from;
-  var anchorAtMarker = !sel.empty;
-  if (isForward) {
-    anchorAtMarker = sel.anchor + before.length <= doc.length
-      && doc.sliceString(sel.anchor, sel.anchor + before.length) === before;
-  } else {
-    anchorAtMarker = sel.anchor >= after.length
-      && doc.sliceString(sel.anchor - after.length, sel.anchor) === after;
-  }
-  var insert;
-  if (fullyWrapped) {
-    // Весь текст обёрнут как единое целое → снимаем всё
-    insert = cleaned;
-  } else if (hasPairs) {
-    // Смешанный текст — ориентируемся на то, где начал пользователь
-    if (anchorAtMarker) {
-      // Пользователь начал выделение с маркера → обернуть чистое
-      insert = before + cleaned + after;
+  if (open !== null) blocks.push({ open, close: doc.lines });
+  return blocks;
+}
+
+function inCodeBlock(blocks, n) {
+  return blocks.some(b => n >= b.open && n <= b.close);
+}
+
+// Строки, затронутые выделением. Выделение, закончившееся в самом начале
+// строки (тройной клик, Shift+Down), эту строку не захватывает.
+function selectedLines(state) {
+  const doc = state.doc;
+  const sel = state.selection.main;
+  const first = doc.lineAt(sel.from).number;
+  let last = doc.lineAt(sel.to).number;
+  if (last > first && sel.to === doc.line(last).from) last--;
+  const lines = [];
+  for (let n = first; n <= last; n++) lines.push(doc.line(n));
+  return lines;
+}
+
+// Применяет изменения, сохраняя выделение вокруг отформатированного текста
+function applyFormatting(changes, selection) {
+  const state = view.state;
+  const sel = state.selection.main;
+  const set = state.changes(changes);
+  if (!selection) {
+    if (sel.empty) {
+      selection = { anchor: set.mapPos(sel.head, 1) };
     } else {
-      // Пользователь начал с обычного текста → просто снять внутренние обёртки
-      insert = cleaned;
+      const from = set.mapPos(sel.from, -1);
+      const to = set.mapPos(sel.to, 1);
+      selection = sel.anchor <= sel.head ? { anchor: from, head: to } : { anchor: to, head: from };
     }
-  } else {
-    // Нет ни одной пары данного типа → просто обернуть
-    insert = before + text + after;
   }
-  view.dispatch({
-    changes: { from: from, to: to, insert: insert },
-    selection: { anchor: from, head: from + insert.length },
-    scrollIntoView: true,
-    userEvent: 'input.formatting'
-  });
+  view.dispatch({ changes: set, selection, scrollIntoView: true, userEvent: 'input.formatting' });
   view.focus();
 }
 
-function linePrefix(prefix) {
-  view.focus();
-  var sel = view.state.selection.main;
-  var doc = view.state.doc;
-  var fromLine = doc.lineAt(sel.from);
-  var toLine = doc.lineAt(sel.to);
-  var changes = [];
-  for (var l = fromLine.number; l <= toLine.number; l++) {
-    var line = doc.line(l);
-    var text = line.text;
-    if (text.startsWith(prefix)) {
-      changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
-    } else {
-      changes.push({ from: line.from, insert: prefix });
+// Разбор строки (после блочного префикса) для одного типа маркера.
+// kinds[i]: 't' — текст, 'm' — маркер этого типа, 'f' — «чужой» символ
+// маркера (например, лишняя * из *** для жирного); fmt[i] — символ внутри
+// обёртки. pairs — найденные обёртки: [o0, o1) открывающий маркер,
+// [c0, c1) закрывающий.
+function parseInline(text, start, before, after) {
+  const n = text.length;
+  const kinds = new Array(n).fill('t');
+  const fmt = new Array(n).fill(false);
+  const cands = [];
+  const fits = RUN_MARKERS[before];
+  let i = start;
+  while (i < n) {
+    // Внутри инлайн-кода другие маркеры не действуют
+    if (text[i] === '`' && before !== '`') {
+      let j = i; while (text[j] === '`') j++;
+      const tick = text.slice(i, j);
+      const close = text.indexOf(tick, j);
+      i = close < 0 ? j : close + tick.length;
+      continue;
+    }
+    if (fits && text[i] === before[0]) {
+      let j = i; while (text[j] === before[0]) j++;
+      for (let k = i; k < j; k++) kinds[k] = 'f';
+      if (fits(j - i)) cands.push({ i, j, open: true, close: true });
+      i = j;
+      continue;
+    }
+    if (!fits && (text.startsWith(before, i) || text.startsWith(after, i))) {
+      const isOpen = text.startsWith(before, i);
+      const len = isOpen ? before.length : after.length;
+      cands.push({ i, j: i + len, open: isOpen, close: !isOpen });
+      i += len;
+      continue;
+    }
+    i++;
+  }
+  // Открывающий маркер должен стоять перед непробельным символом,
+  // закрывающий — после непробельного (как в CommonMark)
+  const pairs = [];
+  let opener = null;
+  for (const c of cands) {
+    const canOpen = c.open && c.j < n && !/\s/.test(text[c.j]);
+    const canClose = c.close && c.i > start && !/\s/.test(text[c.i - 1]);
+    if (opener && canClose) {
+      pairs.push({ o0: opener.i, o1: opener.i + before.length, c0: c.j - after.length, c1: c.j });
+      opener = null;
+    } else if (!opener && canOpen) {
+      opener = c;
     }
   }
-  view.dispatch({ changes: changes, scrollIntoView: true, userEvent: 'input.formatting' });
+  for (const p of pairs) {
+    for (let k = p.o0; k < p.o1; k++) kinds[k] = 'm';
+    for (let k = p.c0; k < p.c1; k++) kinds[k] = 'm';
+    for (let k = p.o1; k < p.c0; k++) fmt[k] = true;
+  }
+  return { kinds, fmt, pairs };
+}
+
+// Участок строки под инлайн-маркеры: без блочного префикса и крайних
+// пробелов. region — участок, который будет перестроен: выделение плюс
+// все обёртки, пересекающие его или вплотную к нему примыкающие.
+function inlineSegment(line, selFrom, selTo, before, after) {
+  const text = line.text;
+  if (HR_RE.test(text)) return null;
+  const prefix = INLINE_PREFIX_RE.exec(text)[0].length;
+  let from = Math.max(selFrom - line.from, prefix);
+  let to = Math.min(selTo, line.to) - line.from;
+  while (from < to && /\s/.test(text[from])) from++;
+  while (to > from && /\s/.test(text[to - 1])) to--;
+  if (from >= to) return null;
+  // Ячейки таблицы оборачиваются по одной, иначе строка таблицы ломается
+  if (TABLE_ROW_RE.test(text) && text.slice(from, to).includes('|')) return null;
+  const parsed = parseInline(text, prefix, before, after);
+  let rFrom = from, rTo = to;
+  for (const p of parsed.pairs) {
+    if (p.o0 <= to && p.c1 >= from) {
+      rFrom = Math.min(rFrom, p.o0);
+      rTo = Math.max(rTo, p.c1);
+    }
+  }
+  // Значимые (непробельные текстовые) символы выделения
+  const selected = [];
+  for (let k = from; k < to; k++) {
+    if (parsed.kinds[k] === 't' && !/\s/.test(text[k])) selected.push(k);
+  }
+  return { line, text, from, to, rFrom, rTo, ...parsed, selected };
+}
+
+// Перестраивает region сегмента так, чтобы выделенные символы получили
+// состояние target. Возвращает изменение и позиции символов в новом тексте.
+function rebuildSegment(seg, target, before, after) {
+  const { text, kinds, fmt } = seg;
+  const items = [];
+  for (let k = seg.rFrom; k < seg.rTo; k++) {
+    if (kinds[k] === 'm') continue;
+    const inSel = k >= seg.from && k < seg.to;
+    items.push({ k, ch: text[k], kind: kinds[k], on: kinds[k] === 't' ? (inSel ? target : fmt[k]) : null });
+  }
+  // «Чужие» символы маркеров следуют за соседним текстом: сначала справа, иначе слева
+  for (let x = 0; x < items.length; x++) {
+    if (items[x].on !== null) continue;
+    let y = x + 1; while (y < items.length && items[y].kind === 'f') y++;
+    if (y < items.length) { items[x].on = items[y].on; continue; }
+    y = x - 1; while (y >= 0 && items[y].kind === 'f') y--;
+    items[x].on = y >= 0 ? items[y].on : false;
+  }
+  // Пробелы по краям форматированного участка выносятся за маркеры
+  for (let x = 0; x < items.length;) {
+    let y = x; while (y < items.length && items[y].on === items[x].on) y++;
+    if (items[x].on) {
+      let a = x; while (a < y && /\s/.test(items[a].ch)) items[a++].on = false;
+      let b = y - 1; while (b >= a && /\s/.test(items[b].ch)) items[b--].on = false;
+    }
+    x = y;
+  }
+  let out = '';
+  const pos = new Map();
+  for (let x = 0; x < items.length; x++) {
+    const it = items[x];
+    const start = out.length;
+    if (it.on && (x === 0 || !items[x - 1].on)) out += before;
+    const at = out.length;
+    out += it.ch;
+    if (it.on && (x === items.length - 1 || !items[x + 1].on)) out += after;
+    pos.set(it.k, { start, at, end: out.length });
+  }
+  const base = seg.line.from;
+  return { change: { from: base + seg.rFrom, to: base + seg.rTo, insert: out }, pos };
+}
+
+function wrapSelection(before, after) {
   view.focus();
+  const state = view.state;
+  const doc = state.doc;
+  const sel = state.selection.main;
+
+  let segments = [];
+  const word = sel.empty ? state.wordAt(sel.head) : null;
+  if (sel.empty) {
+    const line = doc.lineAt(sel.head);
+    const seg = word && inlineSegment(line, word.from, word.to, before, after);
+    if (!seg || !seg.selected.length) {
+      const pos = sel.head - line.from;
+      if (pos >= before.length && line.text.slice(pos - before.length, pos) === before
+          && line.text.startsWith(after, pos)) {
+        // Курсор между пустыми маркерами — убрать их
+        applyFormatting({ from: sel.head - before.length, to: sel.head + after.length });
+      } else {
+        applyFormatting({ from: sel.head, insert: before + after }, { anchor: sel.head + before.length });
+      }
+      return;
+    }
+    segments = [seg];
+  } else {
+    const blocks = codeBlocks(doc);
+    for (const line of selectedLines(state)) {
+      if (inCodeBlock(blocks, line.number)) continue;
+      const seg = inlineSegment(line, sel.from, sel.to, before, after);
+      if (seg && seg.selected.length) segments.push(seg);
+    }
+    if (!segments.length) return;
+  }
+
+  // Однородный текст переключается; смешанный приводится к состоянию
+  // символа, с которого начато выделение (с конца — последнего символа)
+  const states = segments.flatMap(s => s.selected.map(k => s.fmt[k]));
+  let target;
+  if (states.every(Boolean)) target = false;
+  else if (!states.some(Boolean)) target = true;
+  else {
+    const forward = sel.anchor <= sel.head;
+    const seg = forward ? segments[0] : segments[segments.length - 1];
+    target = seg.fmt[forward ? seg.selected[0] : seg.selected[seg.selected.length - 1]];
+  }
+
+  const rebuilt = segments.map(s => rebuildSegment(s, target, before, after));
+  const set = state.changes(rebuilt.map(r => r.change));
+  const newPos = (i, k, key) => set.mapPos(rebuilt[i].change.from, -1) + rebuilt[i].pos.get(k)[key];
+
+  if (sel.empty) {
+    // Курсор остаётся на том же символе слова
+    const seg = segments[0];
+    const head = sel.head - seg.line.from;
+    const k = head < seg.to ? head : seg.to - 1;
+    const p = newPos(0, k, 'at') + (head < seg.to ? 0 : 1);
+    applyFormatting(set, { anchor: p });
+    return;
+  }
+
+  const first = segments[0], lastIdx = segments.length - 1, last = segments[lastIdx];
+  const from = newPos(0, first.selected[0], 'start');
+  const to = newPos(lastIdx, last.selected[last.selected.length - 1], 'end');
+  applyFormatting(set, sel.anchor <= sel.head ? { anchor: from, head: to } : { anchor: to, head: from });
 }
 
 window.toggleBold = () => wrapSelection('**', '**');
@@ -855,152 +1012,179 @@ window.toggleStrikethrough = () => wrapSelection('~~', '~~');
 window.toggleUnderline = () => wrapSelection('<u>', '</u>');
 window.toggleInlineCode = () => wrapSelection('`', '`');
 
+// Строки для блочной разметки: непустые и вне блоков кода. Если таких нет
+// (курсор на пустой строке) — текущая строка, чтобы начать ввод с разметкой.
+function blockTargetLines(state) {
+  const blocks = codeBlocks(state.doc);
+  const lines = selectedLines(state).filter(l => !inCodeBlock(blocks, l.number));
+  const nonBlank = lines.filter(l => !isBlankLine(l.text));
+  if (nonBlank.length) return nonBlank;
+  return lines.length ? [lines[0]] : [];
+}
+
+// Общий toggle блочной разметки. parse(text) -> { at, len, has }: позиция и
+// длина существующего маркера и признак, что строка уже размечена.
+function toggleLineMarkup(parse, makePrefix) {
+  view.focus();
+  const lines = blockTargetLines(view.state);
+  if (!lines.length) return;
+  const parsed = lines.map(l => parse(l.text));
+  const remove = parsed.every(p => p.has);
+  const changes = [];
+  let index = 0;
+  lines.forEach((line, i) => {
+    const p = parsed[i];
+    const from = line.from + p.at;
+    if (remove) changes.push({ from, to: from + p.len, insert: '' });
+    else changes.push({ from, to: from + p.len, insert: makePrefix(index++, p) });
+  });
+  applyFormatting(changes);
+}
+
+const LIST_MARK_RE = /^((?:\s*>)*\s*)([-*+]\s+|\d+[.)]\s+)?/;
+
+window.toggleBulletList = function () {
+  toggleLineMarkup(text => {
+    const m = LIST_MARK_RE.exec(text);
+    const mark = m[2] || '';
+    return { at: m[1].length, len: mark.length, has: /^[-*+]/.test(mark), mark };
+  }, (i, p) => p.has ? p.mark : '- ');
+};
+
+window.toggleOrderedList = function () {
+  toggleLineMarkup(text => {
+    const m = LIST_MARK_RE.exec(text);
+    const mark = m[2] || '';
+    return { at: m[1].length, len: mark.length, has: /^\d/.test(mark) };
+  }, i => (i + 1) + '. ');
+};
+
+window.toggleBlockquote = function () {
+  view.focus();
+  const lines = selectedLines(view.state);
+  const quoted = text => /^\s*>/.test(text);
+  const relevant = lines.filter(l => !isBlankLine(l.text) || quoted(l.text));
+  const remove = relevant.length > 0 && relevant.every(l => quoted(l.text));
+  const changes = [];
+  for (const line of lines) {
+    const m = /^(\s*)(>\s?)?/.exec(line.text);
+    const from = line.from + m[1].length;
+    if (remove) {
+      if (m[2]) changes.push({ from, to: from + m[2].length, insert: '' });
+    } else if (!m[2]) {
+      // Пустые строки внутри цитаты получают «>», чтобы цитата не разрывалась
+      changes.push({ from, insert: line.text.trim() || lines.length === 1 ? '> ' : '>' });
+    }
+  }
+  if (changes.length) applyFormatting(changes);
+};
+
+window.toggleHeading = function (level) {
+  if (level < 1 || level > 6) level = 1;
+  const hashes = '#'.repeat(level);
+  toggleLineMarkup(text => {
+    const lead = LEAD_RE.exec(text)[0].length;
+    const m = /^(#{1,6})(\s+|$)/.exec(text.slice(lead));
+    return { at: lead, len: m ? m[0].length : 0, has: !!m && m[1].length === level };
+  }, () => hashes + ' ');
+};
+
 /**
- * Блок кода: оборачивает выделенный текст в ``` и обратно (toggle)
+ * Блок кода: оборачивает выделенные строки в ``` и обратно (toggle).
+ * Снятие работает, когда выделение внутри блока или включает его ограждения.
  */
 window.toggleCodeBlock = function () {
   view.focus();
-  var sel = view.state.selection.main;
-  var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
-  var trimmed = text.trim();
-  var codeBlockPattern = /^```\n?([\s\S]*)\n?```$/;
-  var match = trimmed.match(codeBlockPattern);
-  if (match) {
-    var inner = match[1];
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: inner },
-      selection: { anchor: sel.from, head: sel.from + inner.length },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-  } else {
-    var innerText = text.trim() || 'текст';
-    var insert = '```\n' + innerText + '\n```';
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: insert },
-      selection: { anchor: sel.from, head: sel.from + insert.length },
-      scrollIntoView: true,
-      userEvent: 'input.formatting'
-    });
-  }
-  view.focus();
-};
-
-/**
- * Заголовок: применяется ко всем выделенным строкам (toggle для каждой)
- */
-window.toggleHeading = function (level) {
-  if (level < 1 || level > 6) level = 1;
-  var prefix = new Array(level + 1).join('#') + ' ';
-  var sel = view.state.selection.main;
-  var doc = view.state.doc;
-  var fromLine = doc.lineAt(sel.from);
-  var toLine = doc.lineAt(sel.to);
-  var changes = [];
-  for (var l = fromLine.number; l <= toLine.number; l++) {
-    var line = doc.line(l);
-    var text = line.text;
-    var headingMatch = text.match(/^(#{1,6})\s/);
-    if (headingMatch && headingMatch[1].length === level) {
-      changes.push({ from: line.from, to: line.from + headingMatch[0].length, insert: '' });
-    } else if (headingMatch) {
-      changes.push({ from: line.from, to: line.from + headingMatch[1].length, insert: new Array(level + 1).join('#') });
-    } else {
-      changes.push({ from: line.from, insert: prefix });
+  const state = view.state;
+  const doc = state.doc;
+  const lines = selectedLines(state);
+  const first = lines[0], last = lines[lines.length - 1];
+  const block = codeBlocks(doc).find(b => b.open <= first.number && last.number <= b.close);
+  if (block) {
+    const open = doc.line(block.open);
+    const changes = [{ from: open.from, to: Math.min(open.to + 1, doc.length) }];
+    if (block.close !== block.open && FENCE_RE.test(doc.line(block.close).text)) {
+      const close = doc.line(block.close);
+      changes.push({ from: close.from - 1, to: close.to });
     }
+    applyFormatting(changes);
+    return;
   }
-  view.dispatch({ changes: changes, scrollIntoView: true, userEvent: 'input.formatting' });
-  view.focus();
+  if (lines.length === 1 && isBlankLine(first.text)) {
+    applyFormatting({ from: first.from, to: first.to, insert: '```\n\n```' }, { anchor: first.from + 4 });
+    return;
+  }
+  applyFormatting([
+    { from: first.from, insert: '```\n' },
+    { from: last.to, insert: '\n```' },
+  ]);
 };
 
-window.toggleBulletList = function () { linePrefix('- '); };
-window.toggleBlockquote = function () { linePrefix('> '); };
+// Выделение без крайних пробелов; переносы внутри схлопываются в пробел,
+// т.к. текст ссылки/подпись не может пересекать пустую строку
+function inlineSelectionText(state) {
+  const sel = state.selection.main;
+  const raw = state.sliceDoc(sel.from, sel.to);
+  const from = sel.from + (raw.length - raw.trimStart().length);
+  const to = sel.to - (raw.length - raw.trimEnd().length);
+  return { from, to, text: raw.trim().replace(/\s*\n\s*/g, ' ') };
+}
 
-window.toggleOrderedList = function () {
-  var sel = view.state.selection.main;
-  var doc = view.state.doc;
-  var fromLine = doc.lineAt(sel.from);
-  var toLine = doc.lineAt(sel.to);
-  var changes = [];
-  var num = 1;
-  for (var l = fromLine.number; l <= toLine.number; l++) {
-    var line = doc.line(l);
-    var text = line.text;
-    var numberedMatch = text.match(/^\d+\.\s/);
-    if (numberedMatch) {
-      changes.push({ from: line.from, to: line.from + numberedMatch[0].length, insert: '' });
-    } else {
-      var nprefix = num + '. ';
-      if (text.startsWith('- ') || text.startsWith('* ')) {
-        changes.push({ from: line.from, to: line.from + 2, insert: nprefix });
-      } else {
-        changes.push({ from: line.from, insert: nprefix });
-      }
-    }
-    num++;
-  }
-  view.dispatch({ changes: changes, scrollIntoView: true, userEvent: 'input.formatting' });
-  view.focus();
-};
+const URL_RE = /^(?:https?|ftp):\/\/\S+$/;
 
 window.insertLink = function () {
-  var sel = view.state.selection.main;
-  var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
-  if (text) {
-    if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('ftp://')) {
-      var insert = '[ссылка](' + text + ')';
-      view.dispatch({
-        changes: { from: sel.from, to: sel.to, insert: insert },
-        selection: { anchor: sel.from + 1, head: sel.from + 7 },
-        scrollIntoView: true, userEvent: 'input.formatting'
-      });
-    } else {
-      var insert = '[' + text + '](url)';
-      view.dispatch({
-        changes: { from: sel.from, to: sel.to, insert: insert },
-        selection: { anchor: sel.from + text.length + 3, head: sel.from + text.length + 6 },
-        scrollIntoView: true, userEvent: 'input.formatting'
-      });
-    }
-  } else {
-    var insert = '[текст ссылки](https://example.com)';
-    view.dispatch({
-      changes: { from: sel.from, insert: insert },
-      selection: { anchor: sel.from + 1, head: sel.from + 14 },
-      scrollIntoView: true, userEvent: 'input.formatting'
-    });
-  }
   view.focus();
+  const { from, to, text } = inlineSelectionText(view.state);
+  if (!text) {
+    const insert = '[текст ссылки](https://example.com)';
+    applyFormatting({ from: to, insert }, { anchor: to + 1, head: to + 13 });
+  } else if (URL_RE.test(text)) {
+    applyFormatting({ from, to, insert: '[ссылка](' + text + ')' }, { anchor: from + 1, head: from + 7 });
+  } else {
+    const insert = '[' + text + '](url)';
+    applyFormatting({ from, to, insert }, { anchor: from + text.length + 3, head: from + text.length + 6 });
+  }
 };
 
 window.insertImage = function () {
-  var sel = view.state.selection.main;
-  var text = sel.empty ? '' : view.state.sliceDoc(sel.from, sel.to);
-  if (text) {
-    var insert = '![' + text + '](url)';
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: insert },
-      scrollIntoView: true, userEvent: 'input.formatting'
-    });
-  } else {
-    var insert = '![подпись](image.jpg)';
-    view.dispatch({
-      changes: { from: sel.from, insert: insert },
-      selection: { anchor: sel.from + 2, head: sel.from + 9 },
-      scrollIntoView: true, userEvent: 'input.formatting'
-    });
-  }
   view.focus();
+  const { from, to, text } = inlineSelectionText(view.state);
+  if (!text) {
+    const insert = '![подпись](image.jpg)';
+    applyFormatting({ from: to, insert }, { anchor: to + 2, head: to + 9 });
+  } else if (URL_RE.test(text)) {
+    applyFormatting({ from, to, insert: '![подпись](' + text + ')' }, { anchor: from + 2, head: from + 9 });
+  } else {
+    const insert = '![' + text + '](url)';
+    applyFormatting({ from, to, insert }, { anchor: from + text.length + 4, head: from + text.length + 7 });
+  }
 };
 
-window.insertHorizontalRule = function () {
-  var sel = view.state.selection.main;
-  view.dispatch({
-    changes: { from: sel.from, insert: '\n\n---\n\n' },
-    scrollIntoView: true, userEvent: 'input.formatting'
-  });
+// Отдельный блок после текущей строки: с пустой строкой перед ним (иначе
+// «текст\n---» станет заголовком, а «текст\n&nbsp;» — частью абзаца) и после
+// него. Курсор ставится на пустую строку после блока.
+function insertBlockAfterLine(block) {
   view.focus();
-};
+  const state = view.state;
+  const doc = state.doc;
+  const line = doc.lineAt(state.selection.main.to);
+  const next = line.number < doc.lines ? doc.line(line.number + 1) : null;
+  const tail = next && isBlankLine(next.text) ? '' : '\n';
+  if (isBlankLine(line.text)) {
+    const prev = line.number > 1 ? doc.line(line.number - 1) : null;
+    const lead = prev && !isBlankLine(prev.text) ? '\n' : '';
+    applyFormatting({ from: line.from, to: line.to, insert: lead + block + tail },
+      { anchor: line.from + lead.length + block.length + 1 });
+  } else {
+    applyFormatting({ from: line.to, insert: '\n\n' + block + tail }, { anchor: line.to + block.length + 3 });
+  }
+}
+
+window.insertHorizontalRule = () => insertBlockAfterLine('---');
+
+// Видимая пустая строка: Markdown схлопывает подряд идущие пустые строки,
+// а абзац из неразрывного пробела отображается как пустой абзац
+window.insertBlankParagraph = () => insertBlockAfterLine('&nbsp;');
 
 // Вставка текста в позицию курсора (для внешних диалогов)
 window.insertText = function (text) {
