@@ -46,6 +46,11 @@
 }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 
+/* Дорожка прокрутки в цвет фона своей панели */
+#editor { --scrollbar-track: #282c34; } /* фон темы oneDark */
+[data-theme="light"] #editor { --scrollbar-track: #fafafa; }
+#preview { --scrollbar-track: var(--bg); }
+
 html,
 body {
   height: 100%;
