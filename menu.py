@@ -81,44 +81,33 @@ def open_html_file(filepath):
 
 
 def save_file():
-    """Сохранить — перезаписать текущий файл или автосохранить в папку по умолчанию из конфига"""
+    """Сохранить — перезаписать текущий файл; при первом сохранении открыть диалог с папкой из настроек"""
     window = webview.active_window()
     if getattr(api, 'html_mode', False):
         # HTML-файл открыт только для просмотра — нельзя затереть его содержимым редактора
         window.evaluate_js('alert("HTML-файл открыт в режиме только для чтения — сохранение недоступно")')
         return
-    content = window.evaluate_js('getEditorContent()')
-    if api.current_file:
-        try:
-            with open(api.current_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            window.evaluate_js('markSaved()')
-        except Exception as e:
-            window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
-    else:
+    if not api.current_file:
+        # Файл ещё ни разу не сохранён — открываем диалог «Сохранить как»,
+        # стартовая папка берётся из настроек сохранения md (config.save.default_path)
         config = load_config()
-        save_cfg = config.get('save', {})
-        save_dir = save_cfg.get('default_path', '') or os.path.join(os.path.expanduser('~'), 'Downloads')
-        name = 'Новый документ.md'
-        filepath = os.path.join(save_dir, name)
-        counter = 1
-        while os.path.exists(filepath):
-            filepath = os.path.join(save_dir, f'Новый документ ({counter}).md')
-            counter += 1
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(content)
-            api.current_file = filepath
-            window.title = f'MD Viewer — {os.path.basename(filepath)}'
-            window.evaluate_js(f'setFileName({json.dumps(os.path.basename(filepath))})')
-            window.evaluate_js('markSaved()')
-        except Exception as e:
-            window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
+        save_dir = config.get('save', {}).get('default_path', '') or os.path.join(os.path.expanduser('~'), 'Downloads')
+        if not os.path.isdir(save_dir):
+            save_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+        save_file_as(initial_dir=save_dir)
+        return
+    content = window.evaluate_js('getEditorContent()')
+    try:
+        with open(api.current_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        window.evaluate_js('markSaved()')
+    except Exception as e:
+        window.evaluate_js(f'alert("Ошибка сохранения: {str(e)}")')
 
 
 
-def save_file_as():
-    """Сохранить как — диалог выбора места сохранения"""
+def save_file_as(initial_dir=''):
+    """Сохранить как — диалог выбора места сохранения (initial_dir — стартовая папка диалога)"""
     window = webview.active_window()
     if getattr(api, 'html_mode', False):
         # HTML-файл открыт только для просмотра — сохранение в этом режиме недоступно
@@ -127,6 +116,7 @@ def save_file_as():
     content = window.evaluate_js('getEditorContent()')
     result = window.create_file_dialog(
         webview.FileDialog.SAVE,
+        directory=initial_dir,
         save_filename='Новый документ.md',
         file_types=['Markdown files (*.md)', 'All files (*.*)']
     )
