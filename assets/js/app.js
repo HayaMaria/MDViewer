@@ -1051,8 +1051,8 @@ window.runInsertChart = function () {
 })();
 
 // ===== Режим просмотра HTML-файла (только чтение) =====
-// HTML-файл показывается справа в изолированном iframe (srcdoc),
-// слева — пустой редактор, заблокированный от правок.
+// HTML-файл показывается на всю ширину окна в изолированном iframe (srcdoc);
+// редактор и разделитель при этом скрыты (класс html-view на body).
 window.__htmlMode = false;
 
 window.setReadOnlyStatus = function () {
@@ -1066,6 +1066,8 @@ window.setReadOnlyStatus = function () {
 // Открыть HTML-файл в превью (вызывается из Python, menu.open_html_file)
 window.loadHtmlPreview = function (html, name) {
   window.__htmlMode = true;
+  // Скрываем пустой редактор и разделитель — превью занимает всю ширину окна
+  document.body.classList.add('html-view');
   // Очищаем редактор, пока он ещё доступен для правок, затем блокируем
   if (window.setEditorContent) window.setEditorContent('');
   if (window.setEditorReadOnly) window.setEditorReadOnly(true);
@@ -1095,6 +1097,8 @@ window.loadHtmlPreview = function (html, name) {
 window.exitHtmlMode = function () {
   if (!window.__htmlMode) return;
   window.__htmlMode = false;
+  // Возвращаем редактор и разделитель (позиция разделителя сохранена в inline-стиле)
+  document.body.classList.remove('html-view');
   if (window.setEditorReadOnly) window.setEditorReadOnly(false);
   var fmtBar = document.getElementById('fmt-bar');
   if (fmtBar) fmtBar.style.display = '';
@@ -1105,6 +1109,8 @@ window.exitHtmlMode = function () {
   }
   // Возвращаем обычное MD-превью (updatePreview не глобален из-за минификации)
   if (window.forceUpdatePreview) window.forceUpdatePreview();
+  // Редактор снова видим — просим CodeMirror пересчитать размеры
+  if (window.__cmView && window.__cmView.requestMeasure) window.__cmView.requestMeasure();
   window.markSaved();
 };
 

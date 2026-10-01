@@ -814,6 +814,15 @@
       overflow: hidden; /* прокрутка — внутри iframe */
     }
 
+    /* Редактор и разделитель скрыты — превью HTML-файла занимает всю ширину */
+    body.html-view #editor,
+    body.html-view #splitter {
+      display: none;
+    }
+    body.html-view #preview {
+      flex: 1 1 100%;
+    }
+
     .html-view-frame {
       display: block;
       width: 100%;

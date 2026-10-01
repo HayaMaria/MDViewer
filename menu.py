@@ -62,7 +62,7 @@ def open_file():
 
 
 def open_html_file(filepath):
-    """Открыть HTML-файл в режиме только чтения: справа iframe с файлом, слева пустой редактор"""
+    """Открыть HTML-файл в режиме только чтения: iframe с файлом на всю ширину, редактор скрыт"""
     window = _window()
     try:
         raw = read_html_text(filepath)
