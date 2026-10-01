@@ -13,6 +13,13 @@ Ctrl+O / Cmd+O — Открыть файл
 Ctrl+S / Cmd+S — Сохранить
 Ctrl+Shift+S / Cmd+Shift+S — Сохранить как
 
+-- Форматирование --
+Ctrl+B / Cmd+B — Жирный
+Ctrl+I / Cmd+I — Курсив
+Ctrl+U / Cmd+U — Подчёркнутый
+Ctrl+Shift+X / Cmd+Shift+X — Зачёркнутый
+Ctrl+` / Cmd+` — Инлайн-код
+
 -- Навигация --
 Home / End — В начало / конец строки
 Ctrl+Home / Cmd+Home — В начало документа

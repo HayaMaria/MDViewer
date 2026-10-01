@@ -458,6 +458,12 @@ const customKeyBindings = [
   { key: "Mod-o", run: callOpenFile },
   { key: "Mod-s", run: callSaveFile },
   { key: "Mod-Shift-s", run: callSaveFileAs },
+  // Форматирование: жирный, курсив, зачёркнутый, подчёркнутый, инлайн-код
+  { key: "Mod-b", run: () => { window.toggleBold(); return true; } },
+  { key: "Mod-i", run: () => { window.toggleItalic(); return true; } },
+  { key: "Mod-Shift-x", run: () => { window.toggleStrikethrough(); return true; } },
+  { key: "Mod-u", run: () => { window.toggleUnderline(); return true; } },
+  { key: "Mod-`", run: () => { window.toggleInlineCode(); return true; } },
   {
     key: "Tab", run: () => {
       // Вставляем символ табуляции напрямую (надёжнее indentMore для markdown)
@@ -1033,6 +1039,7 @@ function linePrefix(prefix) {
 window.toggleBold = function () { view.focus(); wrapSelection('**', '**'); };
 window.toggleItalic = function () { view.focus(); wrapSelection('*', '*'); };
 window.toggleStrikethrough = function () { view.focus(); wrapSelection('~~', '~~'); };
+window.toggleUnderline = function () { view.focus(); wrapSelection('<u>', '</u>'); };
 window.toggleInlineCode = function () { view.focus(); wrapSelection('`', '`'); };
 /**
  * Блок кода: оборачивает выделенный текст в ``` и обратно (toggle)

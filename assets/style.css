@@ -467,6 +467,7 @@
     .fmt-btn b { font-weight: 700; }
     .fmt-btn i { font-style: italic; }
     .fmt-btn s { text-decoration: line-through; }
+    .fmt-btn u { text-decoration: underline; }
     .fmt-btn code {
       font-family: Consolas, "Courier New", monospace;
       font-size: 11px;

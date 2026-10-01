@@ -14,6 +14,7 @@
 - *Курсив* — одна звёздочка вокруг текста: \`*текст*\`
 - \`Код\` — обратные кавычки вокруг текста: \`\` \`код\` \`\`
 - ~~Зачёркнутый~~ — две тильды вокруг текста: \`~~текст~~\`
+- <u>Подчёркнутый</u> — HTML-тег u вокруг текста: \`<u>текст</u>\`
 
 ## Списки
 
@@ -429,10 +430,11 @@ title: Навыки
 <!-- ===== Панель форматирования Markdown ===== -->
   <div id="fmt-bar">
     <div class="fmt-group">
-      <button class="fmt-btn" title="Жирный" onclick="toggleBold()"><b>B</b></button>
-      <button class="fmt-btn" title="Курсив" onclick="toggleItalic()"><i>I</i></button>
-      <button class="fmt-btn" title="Зачёркнутый" onclick="toggleStrikethrough()"><s>S</s></button>
-      <button class="fmt-btn" title="Инлайн-код" onclick="toggleInlineCode()"><code>&lt;/&gt;</code></button>
+      <button class="fmt-btn" title="Жирный (Ctrl+B)" onclick="toggleBold()"><b>B</b></button>
+      <button class="fmt-btn" title="Курсив (Ctrl+I)" onclick="toggleItalic()"><i>I</i></button>
+      <button class="fmt-btn" title="Зачёркнутый (Ctrl+Shift+X)" onclick="toggleStrikethrough()"><s>S</s></button>
+      <button class="fmt-btn" title="Подчёркнутый (Ctrl+U)" onclick="toggleUnderline()"><u>U</u></button>
+      <button class="fmt-btn" title="Инлайн-код (Ctrl+`)" onclick="toggleInlineCode()"><code>&lt;/&gt;</code></button>
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
