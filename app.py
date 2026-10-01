@@ -1,54 +1,51 @@
-import webview,os,logging
-import config,menu
-from api import Api
-from associate import register_file_associations, get_startup_file_path
+import logging
+import os
+import wsgiref.simple_server
 
-assets_dir = os.path.join(os.path.dirname(__file__),"assets")
+import bottle
+import webview
 
-if __name__ == '__main__':
-    # Отключаем автооткрытие DevTools (иначе при debug=True они будут открываться)
-    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+from mdviewer import APP_TITLE, UNTITLED
+from mdviewer.api import Api
+from mdviewer.paths import ICON_PATH, INDEX_HTML
+from mdviewer.state import state
+from mdviewer.win.associate import get_startup_file_path, register_file_associations
 
-    # debug=True нужен, чтобы Tab/Shift+Tab работали (AreBrowserAcceleratorKeysEnabled).
-    # Ставим PYWEBVIEW_LOG=WARNING, чтобы pywebview НЕ перезаписал уровень логов на DEBUG
-    os.environ['PYWEBVIEW_LOG'] = 'WARNING'
 
-    # Подавляем логи HTTP-сервера Bottle (он пишет напрямую в stderr, а не через logging)
+def silence_http_server_logs():
+    # Bottle и wsgiref пишут прямо в stderr, а не через logging
     logging.getLogger('bottle').setLevel(logging.WARNING)
-    import wsgiref.simple_server as _wsgiref_srv
-    _wsgiref_srv.WSGIRequestHandler.log_message = lambda self, fmt, *args: None
-    import bottle as _bottle
-    _bottle._stderr = lambda *args: None
+    wsgiref.simple_server.WSGIRequestHandler.log_message = lambda self, fmt, *args: None
+    bottle._stderr = lambda *args: None
 
-    assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
-    index_html = os.path.join(assets_dir, 'index.html')
 
-    api = Api()
-    # Устанавливаем глобальную ссылку для обработчиков меню
-    globals()['api'] = api
-    menu.api = api
-    api._startup_file = get_startup_file_path()
+def main():
+    # debug=True нужен, чтобы Tab/Shift+Tab доходили до JS (AreBrowserAcceleratorKeysEnabled),
+    # но DevTools при этом открываться не должны
+    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+    # Иначе при debug=True pywebview поднимет уровень своих логов до DEBUG
+    os.environ['PYWEBVIEW_LOG'] = 'WARNING'
+    silence_http_server_logs()
+
+    state.startup_file = get_startup_file_path()
     try:
         register_file_associations()
     except OSError:
         pass
 
-    # Устанавливаем иконку окна
-    icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
-    if os.path.isfile(icon_path):
-        webview._state['icon'] = icon_path
+    if ICON_PATH.is_file():
+        webview._state['icon'] = str(ICON_PATH)
 
-    window = webview.create_window(
-        title='MD Viewer — Новый документ',
-        url=index_html,
-        js_api=api,
+    state.window = webview.create_window(
+        title=f'{APP_TITLE} — {UNTITLED}',
+        url=str(INDEX_HTML),
+        js_api=Api(),
         width=1200,
         height=800,
         resizable=True,
     )
-    # Сохраняем окно в api для WinAPI-вызовов (не зависеть от active_window)
-    api._window = window
+    webview.start(debug=True)
 
-    webview.start(
-        debug=True,          # Включаем debug → AreBrowserAcceleratorKeysEnabled = True → Tab доходит до JS
-    )
+
+if __name__ == '__main__':
+    main()

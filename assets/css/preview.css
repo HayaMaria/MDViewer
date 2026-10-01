@@ -1,0 +1,181 @@
+/* Тема и оформление содержимого превью. Подключается в приложении и встраивается в экспортированный HTML. */
+
+:root {
+  --bg: #1e1e1e;
+  --fg: #d4d4d4;
+  --border: #333;
+  --heading: #e1e1e1;
+  --code-bg: #2d2d2d;
+  --pre-bg: #2d2d2d;
+  --blockquote-color: #999;
+  --table-th-bg: #2d2d2d;
+  --table-border: #444;
+  --hr-border: #333;
+  --link-color: #4c9aff;
+  --strong-color: #e1e1e1;
+}
+
+/* ===== Светлая тема ===== */
+[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #1e1e1e;
+  --border: #ddd;
+  --heading: #1a1a1a;
+  --code-bg: #f5f5f5;
+  --pre-bg: #f5f5f5;
+  --blockquote-color: #666;
+  --table-th-bg: #f0f0f0;
+  --table-border: #ddd;
+  --hr-border: #e0e0e0;
+  --link-color: #1a73e8;
+  --strong-color: #1a1a1a;
+}
+
+#preview h1 {
+  font-size: 2em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin: 16px 0 8px;
+  color: var(--heading);
+}
+
+#preview h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin: 14px 0 6px;
+  color: var(--heading);
+}
+
+#preview h3 {
+  font-size: 1.25em;
+  margin: 12px 0 6px;
+  color: var(--heading);
+}
+
+#preview p {
+  margin: 8px 0;
+}
+
+#preview ul,
+#preview ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+#preview code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.9em;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+#preview pre {
+  background: var(--pre-bg);
+  padding: 16px;
+  border-radius: 6px;
+  margin: 12px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+#preview pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+#preview blockquote {
+  border-left: 4px solid #4c9aff;
+  padding-left: 16px;
+  margin: 12px 0;
+  color: var(--blockquote-color);
+}
+
+#preview table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  word-break: break-all;
+}
+
+#preview th,
+#preview td {
+  border: 1px solid var(--table-border);
+  padding: 8px 12px;
+  text-align: left;
+  word-break: break-all;
+}
+
+#preview th {
+  background: var(--table-th-bg);
+}
+
+#preview a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+#preview a:hover {
+  text-decoration: underline;
+}
+
+#preview strong {
+  color: var(--strong-color);
+}
+
+#preview img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+#preview hr {
+  border: none;
+  border-top: 1px solid var(--hr-border);
+  margin: 16px 0;
+}
+
+/* Запрещаем вылезать за границы только блочным элементам */
+#preview img,
+#preview pre,
+#preview table,
+#preview blockquote,
+#preview iframe,
+#preview video {
+  max-width: 100% !important;
+}
+#preview svg:not([id^='chart-']) {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Mermaid-схемы — прозрачный фон (сливается со страницей) + адаптивная ширина */
+#preview .mermaid svg {
+  background: transparent !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+/* Обёртка pre.mermaid не должна создавать видимую область */
+#preview pre.mermaid {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* Nomnoml-диаграммы */
+#preview .nomnoml-diagram svg {
+  background: transparent !important;
+  max-width: 100%;
+  height: auto;
+}
+#preview .nomnoml-diagram {
+  margin: 8px 0;
+}

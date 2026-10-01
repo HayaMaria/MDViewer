@@ -1,14 +1,15 @@
-import { Chart, registerables } from 'chart.js';
-Chart.register(...registerables);
+// Рендер блоков ```chart. Chart.js берётся из глобального window.Chart:
+// в приложении его кладёт editor.js, в экспортированном HTML — chart.umd.min.js.
 
-Chart.defaults.color = '#d4d4d4';
-Chart.defaults.backgroundColor = '#1e1e1e';
-Chart.defaults.borderColor = '#444';
-// Дополнительные цвета темы для заголовков и сетки (обновляются при смене темы)
-Chart.defaults.headColor = '#e1e1e1';
-Chart.defaults.gridColor = '#333';
+const THEME_COLORS = {
+  dark: { color: '#d4d4d4', backgroundColor: '#1e1e1e', borderColor: '#444', headColor: '#e1e1e1', gridColor: '#333' },
+  light: { color: '#666', backgroundColor: '#ffffff', borderColor: '#ddd', headColor: '#1a1a1a', gridColor: '#e0e0e0' },
+};
 
-window.Chart = Chart;
+// headColor и gridColor — собственные поля, читаются в renderChart
+export function applyChartTheme(dark) {
+  Object.assign(Chart.defaults, THEME_COLORS[dark ? 'dark' : 'light']);
+}
 
 const COLORS = [
   '#4c9aff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8',
@@ -90,12 +91,6 @@ function parseChartDSL(text) {
   return { type, title, xlabel, ylabel, labels, values };
 }
 
-// Экспортируем внутренности для использования в standalone HTML (экспорт)
-window.__chartHelpers = { COLORS, parseChartDSL };
-
-// Делаем renderChart доступным глобально для смены темы
-window.renderChart = renderChart;
-
 export function renderChart(codeText, containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -103,7 +98,7 @@ export function renderChart(codeText, containerId) {
   // перерисовке превью остаются «висящие» инстансы с ResizeObserver'ами)
   try {
     const oldCanvas = container.querySelector('canvas');
-    const oldChart = oldCanvas && window.Chart ? window.Chart.getChart(oldCanvas) : null;
+    const oldChart = oldCanvas ? Chart.getChart(oldCanvas) : null;
     if (oldChart) oldChart.destroy();
   } catch (e) { }
   const parsed = parseChartDSL(codeText);
@@ -246,6 +241,6 @@ export function renderChart(codeText, containerId) {
   }
 
   if (config) {
-    const chart = new Chart(canvas.getContext('2d'), config);
+    new Chart(canvas.getContext('2d'), config);
   }
 }

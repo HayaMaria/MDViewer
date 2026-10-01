@@ -10,8 +10,9 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(root / 'assets'), 'assets'),
+        (str(root / 'icon.ico'), '.'),
     ],
-    hiddenimports=['associate', 'menu', 'htmlfile', 'export', 'titlebar', 'config'],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

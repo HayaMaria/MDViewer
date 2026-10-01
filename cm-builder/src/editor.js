@@ -3,190 +3,50 @@ import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
 import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
-import { defaultKeymap, historyKeymap, undo, redo, indentMore, indentLess } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, undo, redo, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import mermaid from "mermaid";
-import { renderChart } from "./charts.js";
+import { Chart, registerables } from "chart.js";
+import { applyChartTheme, renderChart } from "./charts.js";
+import mermaidThemes from "../../assets/mermaid-themes.json";
 
-// Настройка mermaid — классическая нейтральная палитра (чёрные текст/контуры, белый фон)
-// независимо от темы всего приложения.
-mermaid.initialize({
-  theme: "base",
-  startOnLoad: false,
-  themeVariables: {
-    background: "#ffffff",
-    primaryColor: "#ffffff",
-    primaryBorderColor: "#000000",
-    primaryTextColor: "#000000",
-    secondaryColor: "#ffffff",
-    secondaryBorderColor: "#000000",
-    secondaryTextColor: "#000000",
-    tertiaryColor: "#ffffff",
-    tertiaryBorderColor: "#000000",
-    tertiaryTextColor: "#000000",
-    lineColor: "#000000",
-    arrowheadColor: "#000000",
-    textColor: "#000000",
-    titleColor: "#000000",
-    nodeBkg: "#ffffff",
-    nodeBorder: "#000000",
-    nodeTextColor: "#000000",
-    clusterBkg: "#ffffff",
-    clusterBorder: "#000000",
-    defaultLinkColor: "#000000",
-    edgeLabelBackground: "#ffffff",
-    border1: "#000000",
-    border2: "#000000",
-    mainBkg: "#ffffff",
-    secondBkg: "#ffffff",
-    actorBorder: "#000000",
-    actorBkg: "#ffffff",
-    actorTextColor: "#000000",
-    actorLineColor: "#000000",
-    signalColor: "#000000",
-    signalTextColor: "#000000",
-    labelBoxBkgColor: "#ffffff",
-    labelBoxBorderColor: "#000000",
-    labelTextColor: "#000000",
-    loopTextColor: "#000000",
-    noteBorderColor: "#000000",
-    noteBkgColor: "#ffffff",
-    noteTextColor: "#000000",
-    activationBorderColor: "#000000",
-    activationBkgColor: "#ffffff",
-    sequenceNumberColor: "#000000",
-    sectionBkgColor: "#ffffff",
-    altSectionBkgColor: "#ffffff",
-    sectionBkgColor2: "#ffffff",
-    excludeBkgColor: "#ffffff",
-    taskBorderColor: "#000000",
-    taskBkgColor: "#ffffff",
-    activeTaskBorderColor: "#000000",
-    activeTaskBkgColor: "#ffffff",
-    gridColor: "#000000",
-    doneTaskBkgColor: "#ffffff",
-    doneTaskBorderColor: "#000000",
-    critBkgColor: "#ffffff",
-    critBorderColor: "#000000",
-    todayLineColor: "#000000",
-    vertLineColor: "#000000",
-    taskTextColor: "#000000",
-    taskTextOutsideColor: "#000000",
-    taskTextLightColor: "#000000",
-    taskTextDarkColor: "#000000",
-    taskTextClickableColor: "#000000",
-    personBorder: "#000000",
-    personBkg: "#ffffff",
-    rowOdd: "#ffffff",
-    rowEven: "#ffffff",
-    labelColor: "#000000",
-    errorBkgColor: "#ffffff",
-    errorTextColor: "#000000",
-    classText: "#000000",
-    stateLabelColor: "#000000",
-    stateBkg: "#ffffff",
-    labelBackgroundColor: "#ffffff",
-    compositeBackground: "#ffffff",
-    altBackground: "#ffffff",
-    compositeTitleBackground: "#ffffff",
-    compositeBorder: "#000000",
-    innerEndBackground: "#ffffff",
-    stateBorder: "#000000",
-    specialStateColor: "#000000",
-    rectBkgColor: "#ffffff",
-    transitionColor: "#000000",
-    transitionLabelColor: "#000000",
-    requirementBackground: "#ffffff",
-    requirementBorderColor: "#000000",
-    requirementTextColor: "#000000",
-    relationColor: "#000000",
-    relationLabelBackground: "#ffffff",
-    relationLabelColor: "#000000",
-    git0: "#ffffff",
-    git1: "#dddddd",
-    git2: "#ffffff",
-    git3: "#dddddd",
-    git4: "#ffffff",
-    git5: "#dddddd",
-    git6: "#ffffff",
-    git7: "#dddddd",
-    gitInv0: "#000000",
-    gitInv1: "#222222",
-    gitInv2: "#000000",
-    gitInv3: "#222222",
-    gitInv4: "#000000",
-    gitInv5: "#222222",
-    gitInv6: "#000000",
-    gitInv7: "#222222",
-    branchLabelColor: "#000000",
-    gitBranchLabel0: "#ffffff",
-    gitBranchLabel1: "#ffffff",
-    gitBranchLabel2: "#ffffff",
-    gitBranchLabel3: "#ffffff",
-    gitBranchLabel4: "#ffffff",
-    gitBranchLabel5: "#ffffff",
-    gitBranchLabel6: "#ffffff",
-    gitBranchLabel7: "#ffffff",
-    tagLabelColor: "#000000",
-    tagLabelBackground: "#ffffff",
-    tagLabelBorder: "#000000",
-    commitLabelColor: "#000000",
-    commitLabelBackground: "#ffffff",
-    pie1: "#ffffff",
-    pie2: "#dddddd",
-    pie3: "#bbbbbb",
-    pie4: "#999999",
-    pie5: "#777777",
-    pie6: "#000000",
-    pie7: "#ffffff",
-    pie8: "#dddddd",
-    pie9: "#bbbbbb",
-    pie10: "#999999",
-    pie11: "#777777",
-    pie12: "#000000",
-    pieTitleTextColor: "#000000",
-    pieSectionTextColor: "#000000",
-    pieLegendTextColor: "#000000",
-    pieStrokeColor: "#000000",
-    pieOuterStrokeColor: "#000000",
-    useGradient: false,
-    dropShadow: "none",
-  },
-});
+// Mermaid в превью всегда рисуется светлой палитрой; в тёмной теме его инвертирует CSS
+mermaid.initialize(mermaidThemes.light);
+
+Chart.register(...registerables);
+window.Chart = Chart;
+window.renderChart = renderChart;
+window.applyChartTheme = applyChartTheme;
+applyChartTheme(true);
 
 // Счётчик для уникальных id графиков
 let chartCounter = 0;
 
+function mermaidBlock(text) {
+  return `<pre class="mermaid" data-code="${encodeURIComponent(text)}">${text}</pre>`;
+}
+
+function chartBlock(text) {
+  return `<div id="chart-${chartCounter++}" data-chart-code="${encodeURIComponent(text)}" style="min-height:300px;"></div>`;
+}
+
 // Настройка marked:
 // — [текст](url) — открывается в браузере
 // — [текст](url+) — открывается в новом окне приложения
+// — блоки ```mermaid / ```chart / ```nomnoml — контейнеры для отрисовки диаграмм
 const renderer = {
   link({ href, title, text }) {
     const openInApp = href.endsWith("+");
     const cleanHref = openInApp ? href.slice(0, -1) : href;
     const titleAttr = title ? ` title="${title}"` : "";
     if (openInApp) {
-      // Открыть в новом окне приложения
-      return `<span class="app-link" data-url="${cleanHref}"${titleAttr} style="color:#4c9aff;text-decoration:underline;cursor:pointer;">${text}</span>`;
+      return `<span class="app-link" data-url="${cleanHref}"${titleAttr}>${text}</span>`;
     }
-    // Открыть в браузере
-    return `<span class="external-link" data-url="${cleanHref}"${titleAttr} style="color:#4c9aff;text-decoration:underline;cursor:pointer;">${text} ↗</span>`;
-  },
-  // Кастомный рендер для блоков кода:
-  // если язык "mermaid" — выводим <pre class="mermaid"> для дальнейшей отрисовки
-  // если язык "chart" — выводим div-контейнер для Chart.js
-  image({ href, title, text }) {
-    return false;
+    return `<span class="external-link" data-url="${cleanHref}"${titleAttr}>${text} ↗</span>`;
   },
   code({ text, lang }) {
-    if (lang === "mermaid") {
-      return `<pre class="mermaid" data-code="${encodeURIComponent(text)}">${text}</pre>`;
-    }
-    if (lang === "chart") {
-      const id = "chart-" + (chartCounter++);
-      const escaped = encodeURIComponent(text);
-      return `<div id="${id}" data-chart-code="${escaped}" style="min-height:300px;"></div>`;
-    }
+    if (lang === "mermaid") return mermaidBlock(text);
+    if (lang === "chart") return chartBlock(text);
     if (lang === "nomnoml") {
       const id = "nomnoml-" + (chartCounter++);
       const escaped = encodeURIComponent(text);
@@ -394,70 +254,35 @@ function updatePreview(force) {
     }));
   });
 
-  // Обработчики для ссылок в браузер
-  document.querySelectorAll("#preview .external-link").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const url = el.dataset.url;
-      if (url && window.pywebview && window.pywebview.api) {
-        window.pywebview.api.open_external(url);
-      }
-    });
-  });
+  bindPreviewLinks(previewEl, ".external-link", "open_external");
+  bindPreviewLinks(previewEl, ".app-link", "open_in_app_window");
+}
 
-  // Обработчики для ссылок в окне приложения
-  document.querySelectorAll("#preview .app-link").forEach((el) => {
+function bindPreviewLinks(previewEl, selector, apiMethod) {
+  previewEl.querySelectorAll(selector).forEach((el) => {
     el.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const url = el.dataset.url;
-      if (url && window.pywebview && window.pywebview.api) {
-        window.pywebview.api.open_in_app_window(url);
-      }
+      if (el.dataset.url) window.callApi(apiMethod, el.dataset.url);
     });
   });
 }
 
-// ===== Горячие клавиши для файловых операций =====
-// Эти функции вызываются из кастомных биндингов CodeMirror
-// Они перекидывают вызовы в Python API, чтобы задействовать нативные диалоги
-
-function callNewDocument() {
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.new_document_shortcut();
-  }
-  return true;
-}
-
-function callOpenFile() {
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.open_file_shortcut();
-  }
-  return true;
-}
-
-function callSaveFile() {
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.save_file_shortcut();
-  }
-  return true;
-}
-
-function callSaveFileAs() {
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.save_file_as_shortcut();
-  }
-  return true;
+// Биндинг, вызывающий метод Python API (нативные диалоги файлов)
+function apiCommand(method) {
+  return () => {
+    window.callApi(method);
+    return true;
+  };
 }
 
 // Кастомные биндинги (Mod = Ctrl на Windows/Linux, Cmd на macOS)
 // Должны идти ДО defaultKeymap, чтобы `Mod-s` переопределил стандартный save
 const customKeyBindings = [
-  { key: "Mod-n", run: callNewDocument },
-  { key: "Mod-o", run: callOpenFile },
-  { key: "Mod-s", run: callSaveFile },
-  { key: "Mod-Shift-s", run: callSaveFileAs },
+  { key: "Mod-n", run: apiCommand("new_document") },
+  { key: "Mod-o", run: apiCommand("open_document") },
+  { key: "Mod-s", run: apiCommand("save_document") },
+  { key: "Mod-Shift-s", run: apiCommand("save_document_as") },
   // Форматирование: жирный, курсив, зачёркнутый, подчёркнутый, инлайн-код
   { key: "Mod-b", run: () => { window.toggleBold(); return true; } },
   { key: "Mod-i", run: () => { window.toggleItalic(); return true; } },
@@ -564,20 +389,20 @@ function updateCursorPosition(view) {
     window.updateStatusBarCursor(lineNumber, colNumber);
   }
 }
+
 // ===== Режим «только чтение» (включается при просмотре HTML-файлов) =====
 const readOnlyCompartment = new Compartment();
 
-// Включить/выключить запрет редактирования (вызывается из app.js)
+// Включить/выключить запрет редактирования (вызывается из html-mode.js)
 window.setEditorReadOnly = function (readOnly) {
   view.dispatch({
     effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(!!readOnly)),
   });
 };
 
-// Создаём редактор
-// Светлая тема для CodeMirror — И selection, И active line через EditorView.theme()
-let view = new EditorView({
-  doc: window.INITIAL_TEXT || "# Новый документ",
+// Текст появляется после старта моста pywebview: файл из Проводника или приветствие (main.js)
+const view = new EditorView({
+  doc: "",
   extensions: [
     basicSetup,
     markdown(),
@@ -605,10 +430,7 @@ let view = new EditorView({
 // Экспортируем view для внешнего доступа (нужно для принудительного пересчёта размеров)
 window.__cmView = view;
 
-// Если data-theme не совпадает с темой в config (например, после applyTheme),
-// app.js вызовет setEditorTheme через checkTheme — это надёжно отработает.
-
-// ===== Функция для установки размера шрифта редактора (вызывается из Python/JS) =====
+// ===== Размер шрифта редактора (при запуске и из диалога «Настройки») =====
 window.setEditorFontSize = function (size) {
   const content = view.contentDOM;
   if (content) {
@@ -622,7 +444,7 @@ window.setEditorFontSize = function (size) {
 // Защита от зацикливания (editor -> preview -> editor): флаг источника
 // синхронизации + сброс через requestAnimationFrame + гистерезис 1px.
 const syncScroll = {
-  enabled: true, // переключается кнопкой на тулбаре (см. app.js -> toggleSyncScroll)
+  enabled: true, // переключается кнопкой на тулбаре (см. toolbar.js -> toggleSyncScroll)
   lock: null,    // 'editor' | 'preview' — чья программная установка scrollTop сейчас «летит»
   settling: false, // заморозка на время перестройки превью (см. updatePreview)
 };
@@ -690,7 +512,7 @@ attachSyncScroll(view.scrollDOM, "editor");
 attachSyncScroll(syncEditorWrapEl, "editor"); // внешний контейнер — реальный скроллер редактора
 attachSyncScroll(syncPreviewEl, "preview");
 
-// Включение/выключение синхронной прокрутки (вызывается из app.js / Python)
+// Включение/выключение синхронной прокрутки (вызывается из toolbar.js)
 window.setSyncScrollEnabled = function (enabled) {
   syncScroll.enabled = !!enabled;
   syncScroll.lock = null;
@@ -702,10 +524,6 @@ window.setSyncScrollEnabled = function (enabled) {
       if (target !== null) syncPreviewEl.scrollTop = target;
     }
   }
-};
-
-window.isSyncScrollEnabled = function () {
-  return syncScroll.enabled;
 };
 
 // Сразу показываем превью при запуске
@@ -728,7 +546,8 @@ window.setEditorContent = (text) => {
   // При загрузке файла превью показываем сразу, не дожидаясь debounce
   updatePreview();
 };
-// ===== Функции для меню (вызываются из Python через evaluate_js) =====
+
+// ===== Команды правки (кнопки тулбара) =====
 
 // Отменить последнее действие
 window.undoEditor = () => undo(view);
@@ -894,9 +713,6 @@ window.replaceAllSearch = function (text, replacement) {
   }
 };
 
-// Очистить поиск (убрать подсветку) — управляется через setSearchMatchHighlight
-window.clearSearch = function () { };
-
 // Позиции всех совпадений: массив [from, to]
 window.getSearchMatchPositions = function (text) {
   return getAllSearchMatches(text);
@@ -907,11 +723,8 @@ window.getSearchCursorPos = function () {
   return view.state.selection.main.head;
 };
 
-window.getRenderedBodyHTML = function () {
-  return marked.parse(view.state.doc.toString());
-};
 // ===== Функции форматирования Markdown (панель инструментов) =====
-  /**
+/**
  * Единый умный toggle форматирования.
  *
  * Правила:
@@ -1036,11 +849,12 @@ function linePrefix(prefix) {
   view.focus();
 }
 
-window.toggleBold = function () { view.focus(); wrapSelection('**', '**'); };
-window.toggleItalic = function () { view.focus(); wrapSelection('*', '*'); };
-window.toggleStrikethrough = function () { view.focus(); wrapSelection('~~', '~~'); };
-window.toggleUnderline = function () { view.focus(); wrapSelection('<u>', '</u>'); };
-window.toggleInlineCode = function () { view.focus(); wrapSelection('`', '`'); };
+window.toggleBold = () => wrapSelection('**', '**');
+window.toggleItalic = () => wrapSelection('*', '*');
+window.toggleStrikethrough = () => wrapSelection('~~', '~~');
+window.toggleUnderline = () => wrapSelection('<u>', '</u>');
+window.toggleInlineCode = () => wrapSelection('`', '`');
+
 /**
  * Блок кода: оборачивает выделенный текст в ``` и обратно (toggle)
  */
@@ -1188,39 +1002,6 @@ window.insertHorizontalRule = function () {
   view.focus();
 };
 
-window.insertTable = function () {
-  var sel = view.state.selection.main;
-  var insert = '\n| Заголовок 1 | Заголовок 2 | Заголовок 3 |\n|-------------|-------------|-------------|\n| Текст       | Текст       | Текст       |\n';
-  view.dispatch({
-    changes: { from: sel.from, insert: insert },
-    selection: { anchor: sel.from + insert.length },
-    scrollIntoView: true, userEvent: 'input.formatting'
-  });
-  view.focus();
-};
-
-window.insertMermaid = function () {
-  var sel = view.state.selection.main;
-  var insert = '\n```mermaid\ngraph TD\n    A[Начало] --> B[Конец]\n```\n';
-  view.dispatch({
-    changes: { from: sel.from, insert: insert },
-    selection: { anchor: sel.from + insert.length - 5 },
-    scrollIntoView: true, userEvent: 'input.formatting'
-  });
-  view.focus();
-};
-
-window.insertChart = function () {
-  var sel = view.state.selection.main;
-  var insert = '\n```chart\ntype: column\ntitle: Пример\n| Месяц | Продажи |\n|-------|---------|\n| Янв   | 30      |\n| Фев   | 50      |\n| Мар   | 70      |\n```\n';
-  view.dispatch({
-    changes: { from: sel.from, insert: insert },
-    selection: { anchor: sel.from + insert.length - 5 },
-    scrollIntoView: true, userEvent: 'input.formatting'
-  });
-  view.focus();
-};
-
 // Вставка текста в позицию курсора (для внешних диалогов)
 window.insertText = function (text) {
   var sel = view.state.selection.main;
@@ -1232,179 +1013,20 @@ window.insertText = function (text) {
   view.focus();
 };
 
-window.getRenderedBodyHTMLExport = function () {
-  // Для экспорта ссылки вида [text](url+) превращаем в обычные <a href="url">
-  // Для этого парсим с другим renderer'ом
-  // Используем new marked.Renderer() чтобы все методы (heading, paragraph и т.д.)
-  // были унаследованы от базового класса
-  var exportRenderer = new marked.Renderer();
-  exportRenderer.link = function ({ href, title, text }) {
-    var cleanHref = href.endsWith('+') ? href.slice(0, -1) : href;
-    var titleAttr = title ? ' title="' + title + '"' : '';
-    return '<a href="' + cleanHref + '"' + titleAttr + ' target="_blank">' + text + '</a>';
-  };
-  exportRenderer.code = function ({ text, lang }) {
-    if (lang === 'mermaid') {
-      return '<pre class="mermaid" data-code="' + encodeURIComponent(text) + '">' + text + '</pre>';
-    }
-    if (lang === 'chart') {
-      var id = 'chart-' + (chartCounter++);
-      var escaped = encodeURIComponent(text);
-      return '<div id="' + id + '" data-chart-code="' + escaped + '" style="min-height:300px;"></div>';
-    }
-    return false;
-  };
-  var content = view.state.doc.toString();
-  return marked.parse(content, { renderer: exportRenderer });
+// HTML документа для экспорта: [текст](url+) превращаются в обычные <a href>,
+// nomnoml остаётся блоком кода (в экспорт библиотека не встраивается)
+const exportRenderer = new marked.Renderer();
+exportRenderer.link = function ({ href, title, text }) {
+  const cleanHref = href.endsWith("+") ? href.slice(0, -1) : href;
+  const titleAttr = title ? ` title="${title}"` : "";
+  return `<a href="${cleanHref}"${titleAttr} target="_blank">${text}</a>`;
+};
+exportRenderer.code = function ({ text, lang }) {
+  if (lang === "mermaid") return mermaidBlock(text);
+  if (lang === "chart") return chartBlock(text);
+  return false;
 };
 
-window.getEditorStyles = function () {
-  var el = document.querySelector('style');
-  return el ? el.innerHTML : '';
-};
-// Функция для смены темы Mermaid (вызывается из applyTheme в index.html)
-window.rethemeMermaid = function (dark) {
-  // Восстанавливаем код диаграмм из data-code
-  document.querySelectorAll('.mermaid').forEach(function (el) {
-    var code = el.getAttribute('data-code');
-    if (code) {
-      el.innerHTML = decodeURIComponent(code);
-      el.removeAttribute('data-processed');
-    }
-  });
-  // Инициализируем с цветами под тему
-  mermaid.initialize({
-    theme: 'base',
-    startOnLoad: false,
-    themeVariables: {
-      background: dark ? '#1e1e1e' : '#ffffff',
-      primaryColor: dark ? '#1e1e1e' : '#ffffff',
-      primaryBorderColor: dark ? '#d4d4d4' : '#000000',
-      primaryTextColor: dark ? '#d4d4d4' : '#000000',
-      secondaryColor: dark ? '#1e1e1e' : '#ffffff',
-      secondaryBorderColor: dark ? '#d4d4d4' : '#000000',
-      secondaryTextColor: dark ? '#d4d4d4' : '#000000',
-      tertiaryColor: dark ? '#1e1e1e' : '#ffffff',
-      tertiaryBorderColor: dark ? '#d4d4d4' : '#000000',
-      tertiaryTextColor: dark ? '#d4d4d4' : '#000000',
-      lineColor: dark ? '#d4d4d4' : '#000000',
-      arrowheadColor: dark ? '#d4d4d4' : '#000000',
-      textColor: dark ? '#d4d4d4' : '#000000',
-      titleColor: dark ? '#d4d4d4' : '#000000',
-      nodeBkg: dark ? '#1e1e1e' : '#ffffff',
-      nodeBorder: dark ? '#d4d4d4' : '#000000',
-      nodeTextColor: dark ? '#d4d4d4' : '#000000',
-      clusterBkg: dark ? '#1e1e1e' : '#ffffff',
-      clusterBorder: dark ? '#d4d4d4' : '#000000',
-      defaultLinkColor: dark ? '#d4d4d4' : '#000000',
-      edgeLabelBackground: dark ? '#1e1e1e' : '#ffffff',
-      border1: dark ? '#d4d4d4' : '#000000',
-      border2: dark ? '#d4d4d4' : '#000000',
-      mainBkg: dark ? '#1e1e1e' : '#ffffff',
-      secondBkg: dark ? '#1e1e1e' : '#ffffff',
-      actorBorder: dark ? '#d4d4d4' : '#000000',
-      actorBkg: dark ? '#1e1e1e' : '#ffffff',
-      actorTextColor: dark ? '#d4d4d4' : '#000000',
-      actorLineColor: dark ? '#d4d4d4' : '#000000',
-      signalColor: dark ? '#d4d4d4' : '#000000',
-      signalTextColor: dark ? '#d4d4d4' : '#000000',
-      labelBoxBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      labelBoxBorderColor: dark ? '#d4d4d4' : '#000000',
-      labelTextColor: dark ? '#d4d4d4' : '#000000',
-      loopTextColor: dark ? '#d4d4d4' : '#000000',
-      noteBorderColor: dark ? '#d4d4d4' : '#000000',
-      noteBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      noteTextColor: dark ? '#d4d4d4' : '#000000',
-      activationBorderColor: dark ? '#d4d4d4' : '#000000',
-      activationBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      sequenceNumberColor: dark ? '#d4d4d4' : '#000000',
-      sectionBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      altSectionBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      sectionBkgColor2: dark ? '#1e1e1e' : '#ffffff',
-      excludeBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      taskBorderColor: dark ? '#d4d4d4' : '#000000',
-      taskBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      activeTaskBorderColor: dark ? '#d4d4d4' : '#000000',
-      activeTaskBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      gridColor: dark ? '#555555' : '#000000',
-      doneTaskBkgColor: dark ? '#1e1e1e' : '#ffffff',
-personBorder: dark ? '#d4d4d4' : '#000000',
-      personBkg: dark ? '#1e1e1e' : '#ffffff',
-      rowOdd: dark ? '#1e1e1e' : '#ffffff',
-      rowEven: dark ? '#1e1e1e' : '#ffffff',
-      labelColor: dark ? '#d4d4d4' : '#000000',
-      errorBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      errorTextColor: dark ? '#d4d4d4' : '#000000',
-      classText: dark ? '#d4d4d4' : '#000000',
-      stateLabelColor: dark ? '#d4d4d4' : '#000000',
-      stateBkg: dark ? '#1e1e1e' : '#ffffff',
-      labelBackgroundColor: dark ? '#1e1e1e' : '#ffffff',
-      compositeBackground: dark ? '#1e1e1e' : '#ffffff',
-      altBackground: dark ? '#1e1e1e' : '#ffffff',
-      compositeTitleBackground: dark ? '#1e1e1e' : '#ffffff',
-      compositeBorder: dark ? '#d4d4d4' : '#000000',
-      innerEndBackground: dark ? '#1e1e1e' : '#ffffff',
-      stateBorder: dark ? '#d4d4d4' : '#000000',
-      specialStateColor: dark ? '#d4d4d4' : '#000000',
-      rectBkgColor: dark ? '#1e1e1e' : '#ffffff',
-      transitionColor: dark ? '#d4d4d4' : '#000000',
-      transitionLabelColor: dark ? '#d4d4d4' : '#000000',
-      requirementBackground: dark ? '#1e1e1e' : '#ffffff',
-      requirementBorderColor: dark ? '#d4d4d4' : '#000000',
-      requirementTextColor: dark ? '#d4d4d4' : '#000000',
-      relationColor: dark ? '#d4d4d4' : '#000000',
-      relationLabelBackground: dark ? '#1e1e1e' : '#ffffff',
-      relationLabelColor: dark ? '#d4d4d4' : '#000000',
-      git0: dark ? '#1e1e1e' : '#ffffff',
-      git1: dark ? '#2d2d2d' : '#dddddd',
-      git2: dark ? '#1e1e1e' : '#ffffff',
-      git3: dark ? '#2d2d2d' : '#dddddd',
-      git4: dark ? '#1e1e1e' : '#ffffff',
-      git5: dark ? '#2d2d2d' : '#dddddd',
-      git6: dark ? '#1e1e1e' : '#ffffff',
-      git7: dark ? '#2d2d2d' : '#dddddd',
-      gitInv0: dark ? '#d4d4d4' : '#000000',
-      gitInv1: dark ? '#d4d4d4' : '#222222',
-      gitInv2: dark ? '#d4d4d4' : '#000000',
-      gitInv3: dark ? '#d4d4d4' : '#222222',
-      gitInv4: dark ? '#d4d4d4' : '#000000',
-      gitInv5: dark ? '#d4d4d4' : '#222222',
-      gitInv6: dark ? '#d4d4d4' : '#000000',
-      gitInv7: dark ? '#d4d4d4' : '#222222',
-      branchLabelColor: dark ? '#d4d4d4' : '#000000',
-      gitBranchLabel0: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel1: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel2: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel3: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel4: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel5: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel6: dark ? '#1e1e1e' : '#ffffff',
-      gitBranchLabel7: dark ? '#1e1e1e' : '#ffffff',
-      tagLabelColor: dark ? '#d4d4d4' : '#000000',
-      tagLabelBackground: dark ? '#1e1e1e' : '#ffffff',
-      tagLabelBorder: dark ? '#d4d4d4' : '#000000',
-      commitLabelColor: dark ? '#d4d4d4' : '#000000',
-      commitLabelBackground: dark ? '#1e1e1e' : '#ffffff',
-      pie1: '#ffffff',
-      pie2: '#dddddd',
-      pie3: '#bbbbbb',
-      pie4: '#999999',
-      pie5: '#777777',
-      pie6: '#555555',
-      pie7: '#ffffff',
-      pie8: '#dddddd',
-      pie9: '#bbbbbb',
-      pie10: '#999999',
-      pie11: '#777777',
-      pie12: '#555555',
-      pieTitleTextColor: dark ? '#d4d4d4' : '#000000',
-      pieSectionTextColor: dark ? '#d4d4d4' : '#000000',
-      pieLegendTextColor: dark ? '#d4d4d4' : '#000000',
-      pieStrokeColor: dark ? '#555555' : '#000000',
-      pieOuterStrokeColor: dark ? '#555555' : '#000000',
-      useGradient: false,
-      dropShadow: 'none',
-    }
-  });
-  try { mermaid.run({ querySelector: '.mermaid' }); } catch (e) { }
-};
+window.getRenderedBodyHTMLExport = () =>
+  marked.parse(view.state.doc.toString(), { renderer: exportRenderer });
+
