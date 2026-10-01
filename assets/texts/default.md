@@ -150,6 +150,90 @@ graph LR
 
 ---
 
+## UML-диаграммы
+
+Блоки ```mermaid и ```nomnoml — для UML-диаграмм.
+Удобно вставлять кнопкой ◉ на панели инструментов — откроется диалог с шаблонами.
+
+### Последовательности (sequenceDiagram)
+
+```mermaid
+sequenceDiagram
+    participant U as Пользователь
+    participant S as Сервер
+    U->>S: Запрос
+    S-->>U: Ответ
+```
+
+### Классов (classDiagram)
+
+```mermaid
+classDiagram
+    class Animal {
+        +String name
+        +eat()
+    }
+    class Dog {
+        +bark()
+    }
+    Dog <|-- Animal
+```
+
+### Состояний (stateDiagram)
+
+```mermaid
+stateDiagram
+    [*] --> Idle
+    Idle --> Running
+    Running --> [*]
+```
+
+### Временная линия (timeline)
+
+```mermaid
+timeline
+    title История
+    2020: Запуск
+    2021: Рост
+    2022: Лидер
+```
+
+### Use Case (nomnoml)
+
+```nomnoml
+[Пользователь] -> [Войти]
+[Пользователь] -> [Смотреть]
+[Админ] -> [Управлять]
+```
+
+### Activity (nomnoml)
+
+```nomnoml
+[start] -> [Шаг 1]
+[Шаг 1] -> [Шаг 2]
+[Шаг 2] -> [end]
+```
+
+### Component (nomnoml)
+
+```nomnoml
+[Клиент] <-> [API]
+[API] <-> [Сервис]
+[Сервис] <-> [(База данных)]
+```
+
+### Package (nomnoml)
+
+```nomnoml
+[Клиентский слой]
+[Бизнес-логика]
+[Слой данных]
+[Клиентский слой] <-> [Бизнес-логика]
+[Бизнес-логика] <-> [Слой данных]
+```
+
+---
+
 ## Диаграммы (графики)
 
 Блок ```chart — для построения графиков по таблице.
