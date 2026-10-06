@@ -38,6 +38,10 @@
     }, 0);
   };
 
+  window.isAutosaveEnabled = function () {
+    return enabled;
+  };
+
   window.applyAutosaveSettings = function (autosave) {
     var seconds = parseInt(autosave && autosave.interval, 10);
     if (!seconds || seconds < 1) seconds = 30;

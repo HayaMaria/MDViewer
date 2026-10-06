@@ -78,6 +78,14 @@
   document.getElementById('search-prev').addEventListener('click', function () { find('prev'); });
   document.getElementById('search-close').addEventListener('click', close);
 
+  document.addEventListener('mdv-document-replaced', function () {
+    if (!isOpen()) return;
+    var q = searchInput.value;
+    window.setSearchMatchHighlight(q);
+    if (q) updateCount();
+    else countEl.textContent = '';
+  });
+
   document.getElementById('replace-one').addEventListener('click', function () {
     if (!searchInput.value) return;
     window.replaceOne(searchInput.value, replaceInput.value);

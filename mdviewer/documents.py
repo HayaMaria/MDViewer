@@ -51,6 +51,13 @@ def _invalidate_editor_snapshots():
         pass
 
 
+def _path_key(path):
+    """Один и тот же файл не открываем второй вкладкой. На Windows регистр не важен."""
+    if not isinstance(path, str) or not path:
+        return None
+    return os.path.normcase(os.path.abspath(path))
+
+
 def _place_payload(data):
     return {
         'anchor': data.get('anchor', 0),
@@ -68,33 +75,32 @@ def _capture_editor_session():
     return snapshot if isinstance(snapshot, dict) else None
 
 
-def _session_record(snapshot):
-    path = state.opened_path
-    if not state.html_mode and not path:
-        path = state.current_file
-    if state.html_mode:
-        return {'html': True, 'path': path}
-    snap = snapshot if isinstance(snapshot, dict) else {}
-    dirty = bool(snap.get('dirty'))
-    record = {
-        'html': False,
-        'path': path,
-        'dirty': dirty,
-        'anchor': snap.get('anchor', 0),
-        'head': snap.get('head', 0),
-        'scroll': snap.get('scroll', 0),
-        'previewScroll': snap.get('previewScroll', 0),
-    }
-    if dirty:
-        content = snap.get('content')
-        record['draft'] = content if isinstance(content, str) else ''
-    return record
+def _bundle_dirty(snapshot):
+    tabs = snapshot.get('tabs') if isinstance(snapshot, dict) else None
+    if not isinstance(tabs, list):
+        return False
+    return any(isinstance(tab, dict) and tab.get('dirty') and not tab.get('html') for tab in tabs)
+
+
+def _bundle_ok(snapshot):
+    tabs = snapshot.get('tabs') if isinstance(snapshot, dict) else None
+    if not isinstance(tabs, list) or not tabs:
+        return False
+    for tab in tabs:
+        if not isinstance(tab, dict):
+            return False
+        if tab.get('dirty') and not tab.get('html'):
+            content = tab.get('content')
+            draft = tab.get('draft')
+            if not isinstance(content, str) and not isinstance(draft, str):
+                return False
+    return True
 
 
 def remember_session(snapshot=None, from_js=False):
-    """Записать текущее место. Снимок из JS отвергается, если документ уже сменился."""
+    """Записать вкладки. Снимок из JS отвергается, если документ уже сменился."""
     if from_js:
-        if state.session_paused or state.html_mode or not isinstance(snapshot, dict):
+        if state.session_paused or not isinstance(snapshot, dict):
             return
         try:
             epoch = int(snapshot.get('epoch'))
@@ -102,59 +108,113 @@ def remember_session(snapshot=None, from_js=False):
             return
         if epoch != state.session_epoch:
             return
-        dirty = bool(snapshot.get('dirty'))
-        if dirty and not isinstance(snapshot.get('content'), str):
+        if not _bundle_ok(snapshot):
             return
+        dirty = _bundle_dirty(snapshot)
         if not state.persist_session and not dirty:
             return
         if dirty:
             state.persist_session = True
     elif not state.persist_session:
         return
-    if not state.html_mode and not isinstance(snapshot, dict):
+    if not isinstance(snapshot, dict) or 'tabs' not in snapshot:
         snapshot = _capture_editor_session()
-        if snapshot is None:
+        if not _bundle_ok(snapshot):
             return
-    session.save_session(_session_record(snapshot))
+    session.save_session(snapshot)
 
 
 def note_missing_session_file(data):
-    """Сессия указывала на файл, которого больше нет. Один раз сообщить и забыть её."""
-    path = data.get('path') if isinstance(data, dict) else None
-    if not path or data.get('dirty') or os.path.isfile(path):
+    """Сессия указывала на файлы, которых больше нет. Сообщить, если открывать нечего."""
+    tabs = data.get('tabs') if isinstance(data, dict) else None
+    if not isinstance(tabs, list):
+        return
+    missing = []
+    for tab in tabs:
+        if not isinstance(tab, dict) or tab.get('dirty'):
+            continue
+        path = tab.get('path')
+        if isinstance(path, str) and path and not os.path.isfile(path):
+            missing.append(path)
+    if not missing or session.is_restorable(data):
         return
     session.clear_session()
-    alert(f'Файл из прошлого сеанса не найден:\n{path}')
+    alert('Файл из прошлого сеанса не найден:\n' + '\n'.join(missing))
 
 
 def show_welcome():
-    """Приветственный документ. Сам по себе он сессию не создаёт."""
+    """Приветственная вкладка. Сама по себе она сессию не создаёт."""
     state.persist_session = False
     state.session_epoch += 1
+    state.current_file = None
+    state.opened_path = None
+    state.html_mode = False
     session.clear_session()
+    _show_document_name(UNTITLED)
     call_js('beginWelcomeDocument', state.session_epoch)
+
+
+def bind_active(info):
+    """JS переключил вкладку: подстроить путь, режим и заголовок окна.
+
+    Возвращает номер эпохи, чтобы снимок, снятый до переключения, не затёр новый.
+    """
+    if not isinstance(info, dict):
+        return state.session_epoch
+    state.session_epoch += 1
+    html = bool(info.get('html'))
+    path = info.get('path')
+    if not isinstance(path, str) or not path:
+        path = None
+    state.html_mode = html
+    state.opened_path = path
+    state.current_file = None if html else path
+    state.persist_session = bool(info.get('persist'))
+    if not state.persist_session:
+        session.clear_session()
+    title = info.get('title')
+    if not isinstance(title, str) or not title.strip():
+        title = os.path.basename(path) if path else UNTITLED
+    _show_document_name(title.strip())
+    return state.session_epoch
+
+
+def _markdown_spec(text, path, place=None, dirty=False, title=None):
+    spec = {
+        'text': text if isinstance(text, str) else '',
+        'path': path,
+        'pathKey': _path_key(path),
+        'title': title or (os.path.basename(path) if path else UNTITLED),
+        'dirty': bool(dirty),
+        'html': False,
+        'welcome': False,
+    }
+    if place:
+        spec.update(_place_payload(place))
+    return spec
+
+
+def _focus_open_path(path):
+    """Перейти на вкладку, если этот файл уже открыт."""
+    key = _path_key(path)
+    if not key:
+        return False
+    try:
+        return bool(call_js('focusOpenPath', key))
+    except Exception:
+        return False
 
 
 def _load_markdown(text, path, place=None, dirty=False, remember=True):
     _suspend_session()
     try:
-        call_js('exitHtmlMode')
+        name = os.path.basename(path) if path else UNTITLED
+        call_js('openMarkdownTab', _markdown_spec(text, path, place, dirty, name))
         state.html_mode = False
-        call_js('setEditorContent', text)
         state.current_file = path
         state.opened_path = path
         state.persist_session = True
-        _show_document_name(os.path.basename(path) if path else UNTITLED)
-        if dirty:
-            call_js('markUnsaved')
-        else:
-            call_js('markSaved')
-        call_js('enableSessionTracking')
-        if place:
-            try:
-                call_js('restoreEditorPlace', _place_payload(place))
-            except Exception:
-                pass
+        _show_document_name(name)
     finally:
         _resume_session(remember)
 
@@ -165,6 +225,8 @@ def new_document():
 
 def open_path(path):
     """Открыть файл по пути: .html/.htm — превью только для чтения, остальное — Markdown."""
+    if _focus_open_path(path):
+        return True
     if os.path.splitext(path)[1].lower() in HTML_EXTS:
         return _open_html(path)
     try:
@@ -186,7 +248,15 @@ def _open_html(path):
     _suspend_session()
     try:
         name = os.path.basename(path)
-        call_js('loadHtmlPreview', inject_fit_width_style(html), name)
+        call_js('openHtmlTab', {
+            'html': True,
+            'htmlContent': inject_fit_width_style(html),
+            'path': path,
+            'pathKey': _path_key(path),
+            'title': name,
+            'dirty': False,
+            'welcome': False,
+        })
         # current_file = None защищает HTML-файл от перезаписи через Ctrl+S
         state.current_file = None
         state.opened_path = path
@@ -210,32 +280,85 @@ def restore_session(data):
     return restored
 
 
-def _restore_session(data):
-    if not session.is_restorable(data):
-        return False
-    if data.get('html'):
-        return open_path(data['path'])
-    if data.get('dirty'):
-        _load_markdown(
-            data.get('draft') or '',
-            data.get('path'),
-            place=data,
-            dirty=True,
-            remember=False,
-        )
-        return True
-    path = data.get('path')
+def _materialize_tab(tab):
+    """Прочитать вкладку с диска. None — показать её нельзя."""
+    if session.is_pristine_welcome(tab):
+        return {
+            'welcome': True,
+            'html': False,
+            'text': '',
+            'path': None,
+            'pathKey': None,
+            'title': tab.get('title') or UNTITLED,
+            'dirty': False,
+        }
+    if not session.tab_restorable(tab):
+        return None
+    if tab.get('html'):
+        path = tab['path']
+        try:
+            html = prepare_html_for_preview(path, read_html_text(path))
+        except OSError:
+            return None
+        return {
+            'html': True,
+            'htmlContent': inject_fit_width_style(html),
+            'path': path,
+            'pathKey': _path_key(path),
+            'title': tab.get('title') or os.path.basename(path),
+            'dirty': False,
+            'welcome': False,
+        }
+    if tab.get('dirty'):
+        return _markdown_spec(tab.get('draft') or '', tab.get('path'), tab, dirty=True, title=tab.get('title'))
+    path = tab.get('path')
     if not path:
-        new_document()
-        return True
+        return _markdown_spec('', None, tab, dirty=False, title=tab.get('title'))
     try:
         with open(path, 'r', encoding='utf-8') as f:
             text = f.read()
-    except (OSError, UnicodeDecodeError) as e:
-        alert(f'Ошибка открытия файла: {e}')
-        session.clear_session()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return _markdown_spec(text, path, tab, dirty=False, title=tab.get('title'))
+
+
+def _restore_session(data):
+    if not session.is_restorable(data):
         return False
-    _load_markdown(text, path, place=data, dirty=False, remember=False)
+    prepared = []
+    missing = []
+    chosen = 0
+    active = data.get('active', 0)
+    for index, tab in enumerate(data.get('tabs') or []):
+        item = _materialize_tab(tab)
+        if item is None:
+            path = tab.get('path') if isinstance(tab, dict) else None
+            if path:
+                missing.append(path)
+            continue
+        if index == active:
+            chosen = len(prepared)
+        prepared.append(item)
+    real = [item for item in prepared if not item.get('welcome')]
+    if not real:
+        return False
+    if missing:
+        alert('Файл из прошлого сеанса не найден:\n' + '\n'.join(missing))
+    if chosen >= len(prepared):
+        chosen = 0
+    current = prepared[chosen]
+    _suspend_session()
+    try:
+        call_js('installTabs', {'tabs': prepared, 'active': chosen})
+        html = bool(current.get('html'))
+        path = current.get('path')
+        state.html_mode = html
+        state.opened_path = path
+        state.current_file = None if html else path
+        state.persist_session = True
+        _show_document_name(current.get('title') or UNTITLED)
+    finally:
+        _resume_session(False)
     return True
 
 
@@ -248,16 +371,20 @@ def open_file_dialog():
 def save():
     if state.html_mode:
         alert(READ_ONLY_MESSAGE)
-        return
+        return False
     if state.current_file:
-        _write_editor_content(state.current_file)
-    else:
-        save_as(config.md_save_dir())
+        return bool(_write_editor_content(state.current_file))
+    return bool(save_as(config.md_save_dir()))
 
 
 def autosave():
     """Сохранить открытый файл без диалога. Новый документ и HTML пропускаются."""
-    if state.html_mode or not state.current_file:
+    if state.session_paused or state.html_mode or not state.current_file:
+        return False
+    try:
+        if call_js('autosaveAllowed') is False:
+            return False
+    except Exception:
         return False
     return _write_editor_content(state.current_file)
 
@@ -265,7 +392,7 @@ def autosave():
 def save_as(initial_dir=''):
     if state.html_mode:
         alert(READ_ONLY_MESSAGE)
-        return
+        return False
     result = state.window.create_file_dialog(
         webview.FileDialog.SAVE,
         directory=initial_dir,
@@ -273,12 +400,18 @@ def save_as(initial_dir=''):
         file_types=SAVE_FILE_TYPES,
     )
     if not result or not _write_editor_content(result[0], remember=False):
-        return
+        return False
     state.current_file = result[0]
     state.opened_path = result[0]
     state.persist_session = True
-    _show_document_name(os.path.basename(result[0]))
+    name = os.path.basename(result[0])
+    _show_document_name(name)
+    try:
+        call_js('noteActivePath', result[0], name, _path_key(result[0]))
+    except Exception:
+        pass
     remember_session()
+    return True
 
 
 def _editor_snapshot():

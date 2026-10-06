@@ -562,29 +562,34 @@ window.setEditorReadOnly = function (readOnly) {
 };
 
 // Текст появляется после старта моста pywebview: файл из Проводника или приветствие (main.js)
+const editorExtensions = [
+  basicSetup,
+  markdown(),
+  oneDark,
+  keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
+  searchHighlightExt,
+  readOnlyCompartment.of(EditorState.readOnly.of(false)),
+  EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      // Превью перестраиваем с задержкой (debounce) — иначе на документах со
+      // множеством диаграмм ввод блокируется на каждой клавише
+      schedulePreviewUpdate();
+      // Помечаем как несохранённое при изменении документа
+      if (window.markUnsaved) window.markUnsaved();
+    }
+    // Обновляем позицию курсора при любом изменении выделения или документа
+    if (update.selectionSet || update.docChanged) {
+      updateCursorPosition(update.view);
+    }
+  }),
+];
+
+function createEditorState(doc) {
+  return EditorState.create({ doc: doc || "", extensions: editorExtensions });
+}
+
 const view = new EditorView({
-  doc: "",
-  extensions: [
-    basicSetup,
-    markdown(),
-    oneDark,
-    keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
-    searchHighlightExt,
-    readOnlyCompartment.of(EditorState.readOnly.of(false)),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        // Превью перестраиваем с задержкой (debounce) — иначе на документах со
-        // множеством диаграмм ввод блокируется на каждой клавише
-        schedulePreviewUpdate();
-        // Помечаем как несохранённое при изменении документа
-        if (window.markUnsaved) window.markUnsaved();
-      }
-      // Обновляем позицию курсора при любом изменении выделения или документа
-      if (update.selectionSet || update.docChanged) {
-        updateCursorPosition(update.view);
-      }
-    }),
-  ],
+  state: createEditorState(""),
   parent: document.getElementById("editor"),
 });
 
@@ -593,10 +598,45 @@ window.__cmView = view;
 
 // ===== Размер шрифта редактора (при запуске и из диалога «Настройки») =====
 window.setEditorFontSize = function (size) {
+  window.__editorFontSize = size;
   const content = view.contentDOM;
   if (content) {
     content.style.fontSize = size + "px";
   }
+};
+
+function reapplyEditorFontSize() {
+  if (window.__editorFontSize) window.setEditorFontSize(window.__editorFontSize);
+}
+
+function finishDocumentSwap() {
+  reapplyEditorFontSize();
+  updatePreview();
+  document.dispatchEvent(new CustomEvent("mdv-document-replaced"));
+}
+
+// Подмена документа сбрасывает историю правок, чтобы Ctrl+Z не возвращал текст другой вкладки.
+function replaceEditorDocument(text) {
+  window.__suppressDirty = true;
+  try {
+    view.setState(createEditorState(text));
+  } finally {
+    window.__suppressDirty = false;
+  }
+  finishDocumentSwap();
+  return view.state;
+}
+
+// Вернуть снимок вкладки: текст, курсор и свою историю отмены.
+window.swapEditorState = function (state) {
+  window.__suppressDirty = true;
+  try {
+    if (state) view.setState(state);
+  } finally {
+    window.__suppressDirty = false;
+  }
+  finishDocumentSwap();
+  return view.state;
 };
 
 // ===== Синхронная прокрутка редактора и превью =====
@@ -699,13 +739,9 @@ window.forceUpdatePreview = () => updatePreview(true);
 // Функция для получения текста из редактора (вызывается из Python)
 window.getEditorContent = () => view.state.doc.toString();
 
-// Функция для установки текста в редактор (вызывается из Python)
+// Функция для установки текста в редактор (вызывается из Python и при смене вкладки)
 window.setEditorContent = (text) => {
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: text },
-  });
-  // При загрузке файла превью показываем сразу, не дожидаясь debounce
-  updatePreview();
+  replaceEditorDocument(text);
 };
 
 // ===== Команды правки (кнопки тулбара) =====

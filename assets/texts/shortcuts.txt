@@ -9,9 +9,12 @@ Shift+Tab — Уменьшить отступ
 
 -- Файловые операции --
 Ctrl+N / Cmd+N — Новый документ
+Ctrl+T / Cmd+T — Новая вкладка
 Ctrl+O / Cmd+O — Открыть файл
 Ctrl+S / Cmd+S — Сохранить
 Ctrl+Shift+S / Cmd+Shift+S — Сохранить как
+Ctrl+W / Cmd+W — Закрыть вкладку
+Ctrl+Tab / Ctrl+Shift+Tab — Следующая / предыдущая вкладка
 
 -- Форматирование --
 Ctrl+B / Cmd+B — Жирный
