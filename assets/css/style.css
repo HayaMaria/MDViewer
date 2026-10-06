@@ -256,6 +256,105 @@ body {
   flex-shrink: 0;
 }
 
+/* ===== Вкладки ===== */
+#tab-bar {
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  user-select: none;
+}
+
+#tab-list {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+#tab-list::-webkit-scrollbar { height: 6px; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 200px;
+  min-width: 92px;
+  padding: 0 6px 0 10px;
+  border-right: 1px solid var(--toolbar-border);
+  background: transparent;
+  color: #9a9a9a;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab:hover { background: var(--toolbar-btn-hover); color: var(--fg); }
+
+.tab.active {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.tab.dirty .tab-dirty { display: block; }
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-close:hover { background: var(--toolbar-btn-active); }
+
+#tab-new {
+  flex: 0 0 34px;
+  border: none;
+  border-left: 1px solid var(--toolbar-border);
+  background: transparent;
+  color: var(--fg);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#tab-new:hover { background: var(--toolbar-btn-hover); }
+
+#close-tab-question { line-height: 1.45; }
+
+#close-tab-name { font-weight: 600; }
+
 /* ===== Панель форматирования Markdown ===== */
 #fmt-bar {
   display: flex;

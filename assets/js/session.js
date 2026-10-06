@@ -65,12 +65,15 @@
   function applyPlace(place, focus) {
     var view = window.__cmView;
     if (!view) return;
-    var len = view.state.doc.length;
-    view.dispatch({
-      selection: { anchor: clamp(place.anchor, len), head: clamp(place.head, len) },
-      scrollIntoView: false,
-    });
-    if (focus) view.focus();
+    // Состояние редактора уже содержит курсор — двигаем только прокрутку.
+    if (!place.scrollOnly) {
+      var len = view.state.doc.length;
+      view.dispatch({
+        selection: { anchor: clamp(place.anchor, len), head: clamp(place.head, len) },
+        scrollIntoView: false,
+      });
+      if (focus) view.focus();
+    }
     applyEditorScroll(place.scroll);
     var preview = document.getElementById('preview');
     if (!preview) return;
@@ -78,25 +81,40 @@
     applyRatio(preview, syncScrollOn() ? place.scroll : place.previewScroll);
   }
 
-  window.captureSessionSnapshot = function () {
+  window.readEditorPlace = function () {
     var view = window.__cmView;
     var anchor = 0;
     var head = 0;
+    var content = '';
     if (view) {
       var sel = view.state.selection.main;
       anchor = sel.anchor;
       head = sel.head;
+      content = view.state.doc.toString();
     }
-    var dirty = !!(window.isDocumentDirty && window.isDocumentDirty());
     return {
-      epoch: sessionEpoch,
       anchor: anchor,
       head: head,
       scroll: editorScrollRatio(),
       previewScroll: readRatio(document.getElementById('preview')),
-      dirty: dirty,
-      content: dirty && view ? view.state.doc.toString() : '',
+      content: content,
     };
+  };
+
+  window.captureSessionSnapshot = function () {
+    var place = window.readEditorPlace();
+    var live = {
+      epoch: sessionEpoch,
+      anchor: place.anchor,
+      head: place.head,
+      scroll: place.scroll,
+      previewScroll: place.previewScroll,
+      dirty: !!(window.isDocumentDirty && window.isDocumentDirty()),
+      content: place.content,
+    };
+    if (window.collectSessionState) return window.collectSessionState(live);
+    if (!live.dirty) live.content = '';
+    return live;
   };
 
   // Сбросить уже поставленный снимок: он снят до сохранения или смены документа.
@@ -133,13 +151,20 @@
     }
   };
 
+  function keepSession() {
+    return !!(window.sessionHasDocuments && window.sessionHasDocuments());
+  }
+
   function flushSession() {
-    if (!tracking || paused || window.__htmlMode || !layoutReady()) return;
+    if (paused) return;
+    if (!keepSession() && (!tracking || window.__htmlMode)) return;
+    if (!window.__htmlMode && !layoutReady()) return;
     callApi('save_session', window.captureSessionSnapshot());
   }
 
   function scheduleSessionSave() {
-    if (!tracking || paused || window.__htmlMode) return;
+    if (paused) return;
+    if (!keepSession() && (!tracking || window.__htmlMode)) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(function () {
       timer = null;
@@ -157,6 +182,7 @@
 
   var prevUnsaved = window.markUnsaved;
   window.markUnsaved = function () {
+    if (window.__suppressDirty) return;
     if (prevUnsaved) prevUnsaved();
     if (!paused) tracking = true;
     scheduleSessionSave();
@@ -214,18 +240,26 @@
     });
   };
 
-  // Приветствие не считается местом, на котором остановились
+  // Приветствие не считается местом, на котором остановились.
+  // __welcomeToken отменяет загрузку, если за это время открыли другой документ.
   window.beginWelcomeDocument = function (epoch) {
     window.pauseSessionPersistence(epoch);
     window.disableSessionTracking();
+    var token = (window.__welcomeToken || 0) + 1;
+    window.__welcomeToken = token;
     fetch('texts/default.md')
       .then(function (response) { return response.text(); })
       .then(function (text) {
-        setEditorContent(text);
-        markSaved();
+        if (token !== window.__welcomeToken) return;
+        if (window.welcomeTextReady) window.welcomeTextReady(text);
+        else {
+          setEditorContent(text);
+          markSaved();
+        }
       })
       .catch(function () {})
       .then(function () {
+        if (token !== window.__welcomeToken) return;
         window.resumeSessionPersistence();
       });
   };
@@ -246,7 +280,8 @@
       timer = null;
     }
     var pending = null;
-    if (tracking && !paused && !window.__htmlMode && layoutReady()) {
+    var canFlush = !paused && (keepSession() || (tracking && !window.__htmlMode && layoutReady()));
+    if (canFlush && (window.__htmlMode || layoutReady())) {
       pending = callApi('save_session', window.captureSessionSnapshot());
     }
     Promise.resolve(pending).then(function () {

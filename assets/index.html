@@ -26,6 +26,7 @@
         <hr class="menu-sep">
         <button class="menu-item" data-action="save_document">Сохранить<span class="shortcut">Ctrl+S</span></button>
         <button class="menu-item" data-action="save_document_as">Сохранить как...<span class="shortcut">Ctrl+Shift+S</span></button>
+        <button class="menu-item" data-action="js:closeActiveTab">Закрыть вкладку<span class="shortcut">Ctrl+W</span></button>
         <hr class="menu-sep">
         <button class="menu-item" data-action="export_html_default">Экспортировать HTML</button>
         <button class="menu-item" data-action="js:openExportAsDialog">Экспортировать HTML как...</button>
@@ -114,6 +115,12 @@
     </div>
   </div>
 
+  <!-- ===== Вкладки документов ===== -->
+  <div id="tab-bar">
+    <div id="tab-list" role="tablist" aria-label="Открытые документы"></div>
+    <button type="button" id="tab-new" title="Новый документ (Ctrl+T)">+</button>
+  </div>
+
   <!-- ===== Панель форматирования Markdown ===== -->
   <div id="fmt-bar">
     <div class="fmt-group">
@@ -189,6 +196,24 @@
       <span class="value" id="status-filename">Новый документ</span>
     </span>
     <span class="status-item status-save saved" id="status-save">Сохранено</span>
+  </div>
+
+  <!-- ===== Закрытие вкладки с несохранённым текстом ===== -->
+  <div id="close-tab-overlay" class="modal-overlay">
+    <div class="modal" style="width:420px">
+      <div class="modal-header">
+        <span>Сохранить изменения?</span>
+        <button class="modal-close" onclick="answerCloseTab('cancel')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="close-tab-question">В документе «<span id="close-tab-name"></span>» есть несохранённые изменения.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="answerCloseTab('discard')">Не сохранять</button>
+        <button class="btn" onclick="answerCloseTab('cancel')">Отмена</button>
+        <button class="btn btn-primary" onclick="answerCloseTab('save')">Сохранить</button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== Справка ===== -->
@@ -516,6 +541,7 @@
   <script src="js/theme.js"></script>
   <script src="js/statusbar.js"></script>
   <script src="js/session.js"></script>
+  <script src="js/tabs.js"></script>
   <script src="js/autosave.js"></script>
   <script src="js/splitter.js"></script>
   <script src="js/search.js"></script>

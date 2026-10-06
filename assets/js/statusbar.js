@@ -49,6 +49,7 @@
   };
 
   window.markUnsaved = function () {
+    if (window.__suppressDirty) return;
     if (window.__htmlMode) {
       window.setReadOnlyStatus();
       return;

@@ -68,6 +68,10 @@ class Api:
     def save_session(self, snapshot):
         documents.remember_session(snapshot, from_js=True)
 
+    def bind_active_document(self, info):
+        """Активная вкладка сменилась на стороне страницы."""
+        return documents.bind_active(info)
+
     def new_document(self):
         documents.new_document()
 
