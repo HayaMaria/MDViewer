@@ -17,7 +17,10 @@
     });
     document.querySelectorAll('#preview .nomnoml-diagram').forEach(function (el) {
       var code = decodeURIComponent(el.dataset.nomnomlCode || '');
-      if (code) window.renderNomnoml(el, code);
+      if (code) {
+        window.renderNomnoml(el, code);
+        if (window.scaleDiagramSvg) window.scaleDiagramSvg(el);
+      }
     });
 
     callApi('apply_titlebar_theme', dark);

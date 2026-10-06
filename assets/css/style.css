@@ -89,7 +89,7 @@ body {
   line-height: 1.6;
   word-break: break-all;
   overflow-wrap: anywhere;
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 
 /* ===== Splitter ===== */
@@ -940,4 +940,23 @@ body.splitter-drag iframe {
   text-align: center;
   font-family: Consolas, monospace;
   font-size: 13px;
+}
+
+.media-size-defaults {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.media-size-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.media-size-row .input {
+  width: 100px;
+  flex-shrink: 0;
 }

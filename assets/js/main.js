@@ -5,6 +5,10 @@ onApiReady(function () {
     setEditorFontSize(s.font_size);
     applySyncScrollState(s.sync_scroll);
     applySplitterPos(s.splitter_pos);
+    if (s.media_size_options && s.media_size_options.length) {
+      window.MEDIA_SIZE_OPTIONS = s.media_size_options;
+    }
+    window.applyMediaSizeDefaults(s.media_sizes);
   });
 
   // Файл из Проводника (открывает Python) или приветственный документ

@@ -136,31 +136,54 @@
   border-radius: 4px;
 }
 
+/* Ширина медиа в px — не сжимается при узкой панели (как размер шрифта) */
+#preview .mdv-sized {
+  box-sizing: border-box;
+  height: auto;
+  flex-shrink: 0;
+  max-width: none !important;
+}
+#preview img.mdv-sized[data-size="default"] {
+  width: var(--mdv-default-image, 500px);
+}
+#preview .mermaid.mdv-sized[data-size="default"] {
+  width: var(--mdv-default-mermaid, 600px);
+}
+#preview .nomnoml-diagram.mdv-sized[data-size="default"],
+#preview .mermaid.mdv-sized[data-kind="uml"][data-size="default"] {
+  width: var(--mdv-default-uml, 450px);
+}
+#preview [id^="chart-"].mdv-sized[data-size="default"] {
+  width: var(--mdv-default-chart, 600px);
+}
+#preview img.mdv-sized {
+  height: auto;
+}
+
 #preview hr {
   border: none;
   border-top: 1px solid var(--hr-border);
   margin: 16px 0;
 }
 
-/* Запрещаем вылезать за границы только блочным элементам */
-#preview img,
-#preview pre,
+/* Запрещаем вылезать за границы только блочным элементам
+   (кроме .mdv-sized — у них фиксированная ширина в px) */
+#preview img:not(.mdv-sized),
+#preview pre:not(.mdv-sized),
 #preview table,
 #preview blockquote,
 #preview iframe,
 #preview video {
   max-width: 100% !important;
 }
-#preview svg:not([id^='chart-']) {
+#preview :not(.mdv-sized) > svg:not([id^='chart-']) {
   max-width: 100% !important;
   height: auto !important;
 }
 
-/* Mermaid-схемы — прозрачный фон (сливается со страницей) + адаптивная ширина */
+/* Mermaid-схемы — прозрачный фон (сливается со страницей) */
 #preview .mermaid svg {
   background: transparent !important;
-  max-width: 100% !important;
-  height: auto !important;
 }
 /* Обёртка pre.mermaid не должна создавать видимую область */
 #preview pre.mermaid {
@@ -168,14 +191,21 @@
   padding: 0 !important;
   border-radius: 0 !important;
   border: none !important;
+  overflow: hidden;
 }
 
 /* Nomnoml-диаграммы */
 #preview .nomnoml-diagram svg {
   background: transparent !important;
-  max-width: 100%;
-  height: auto;
 }
 #preview .nomnoml-diagram {
   margin: 8px 0;
+  overflow: hidden;
+}
+
+/* Высота графика следует за шириной — круговые и радар тоже меняют размер */
+#preview [id^="chart-"].mdv-sized {
+  height: auto;
+  aspect-ratio: 8 / 5;
+  min-height: 0;
 }

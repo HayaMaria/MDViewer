@@ -149,8 +149,8 @@
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
-      <button class="fmt-btn" title="Mermaid-диаграмма" onclick="openModal('mermaid-config-overlay')">◇</button>
-      <button class="fmt-btn" title="UML-диаграмма" onclick="openModal('uml-config-overlay')">◉</button>
+      <button class="fmt-btn" title="Mermaid-диаграмма" onclick="openMermaidConfig()">◇</button>
+      <button class="fmt-btn" title="UML-диаграмма" onclick="openUmlConfig()">◉</button>
       <button class="fmt-btn" title="Chart.js график" onclick="openChartConfig()">📊</button>
     </div>
   </div>
@@ -240,6 +240,27 @@
           <div class="font-size-control">
             <input type="range" id="settings-font-size" min="10" max="30" step="1">
             <span id="settings-font-size-value">15px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Размер по умолчанию</label>
+          <div class="media-size-defaults">
+            <label class="media-size-row">
+              <span>Изображения</span>
+              <select id="settings-size-image" class="input input-sm"></select>
+            </label>
+            <label class="media-size-row">
+              <span>Mermaid-диаграммы</span>
+              <select id="settings-size-mermaid" class="input input-sm"></select>
+            </label>
+            <label class="media-size-row">
+              <span>UML-диаграммы</span>
+              <select id="settings-size-uml" class="input input-sm"></select>
+            </label>
+            <label class="media-size-row">
+              <span>Графики</span>
+              <select id="settings-size-chart" class="input input-sm"></select>
+            </label>
           </div>
         </div>
       </div>
@@ -353,6 +374,10 @@
           <textarea id="mermaid-content" rows="5" class="input input-mono">
     A[Начало] --> B[Конец]</textarea>
         </div>
+        <div>
+          <label class="field-label">Размер</label>
+          <select id="mermaid-size" class="input"></select>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal('mermaid-config-overlay')">Отмена</button>
@@ -395,6 +420,10 @@
     B-->>A: Ответ</textarea>
           <div class="hint">Для Nomnoml-диаграмм используйте синтаксис: <code>[Актор] -> (Действие)</code></div>
         </div>
+        <div>
+          <label class="field-label">Размер</label>
+          <select id="uml-size" class="input"></select>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal('uml-config-overlay')">Отмена</button>
@@ -424,6 +453,10 @@
         <div>
           <label class="field-label">Название (title)</label>
           <input type="text" id="chart-title" class="input" value="Пример">
+        </div>
+        <div>
+          <label class="field-label">Размер</label>
+          <select id="chart-size" class="input"></select>
         </div>
         <div class="row">
           <div>
