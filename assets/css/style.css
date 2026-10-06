@@ -1,7 +1,7 @@
 /* Интерфейс приложения. Тема и оформление содержимого превью — в preview.css. */
 
 :root {
-  --accent: var(--accent);
+  --accent: #4c9aff;
   --toolbar-bg: #252526;
   --toolbar-border: #3c3c3c;
   --toolbar-btn-hover: #3c3c3c;
