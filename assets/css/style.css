@@ -118,13 +118,19 @@ body {
 [data-theme="light"] .splitter:hover,
 [data-theme="light"] .splitter.active { background: #999; }
 
-/* Принуждаем CodeMirror подстраиваться под ширину родителя */
+/* Принуждаем CodeMirror подстраиваться под ширину родителя.
+   Высота — на всю панель: иначе .cm-editor сжимается по тексту, и пунктирная
+   рамка фокуса (outline у .cm-focused) оказывается сразу под последней строкой. */
 #editor .cm-editor,
 #editor .cm-scroller,
 #editor .cm-content {
   max-width: 100% !important;
   min-width: 0 !important;
   width: 100% !important;
+}
+#editor .cm-editor {
+  height: 100%;
+  outline: none;
 }
 #editor .cm-content {
   box-sizing: border-box !important;
@@ -141,6 +147,7 @@ body {
   word-break: break-all !important;
 }
 #editor .cm-scroller {
+  height: 100% !important;
   overflow-x: hidden !important;
   contain: none !important;
   scrollbar-gutter: stable !important;
