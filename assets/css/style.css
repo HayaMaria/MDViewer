@@ -942,6 +942,49 @@ body.splitter-drag iframe {
   font-size: 13px;
 }
 
+#settings-overlay .modal {
+  max-height: 85vh;
+}
+
+#settings-overlay .modal-body {
+  min-height: 0;
+}
+
+.autosave-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  accent-color: var(--accent);
+}
+
+.autosave-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.autosave-row .input {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.autosave-row .input:disabled {
+  opacity: 0.55;
+}
+
 .media-size-defaults {
   display: flex;
   flex-direction: column;
