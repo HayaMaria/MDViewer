@@ -1,4 +1,4 @@
-// ===== Запуск: применить сохранённые настройки и открыть первый документ =====
+// ===== Запуск: настройки, файл из Проводника, прошлый сеанс или приветствие =====
 onApiReady(function () {
   callApi('get_settings').then(function (s) {
     applyTheme(s.theme === 'dark');
@@ -12,14 +12,11 @@ onApiReady(function () {
     window.applyAutosaveSettings(s.autosave);
   });
 
-  // Файл из Проводника (открывает Python) или приветственный документ
+  // Файл из Проводника важнее сессии. Иначе — документ, на котором остановились.
   callApi('open_startup_file').then(function (opened) {
     if (opened) return;
-    fetch('texts/default.md')
-      .then(function (response) { return response.text(); })
-      .then(function (text) {
-        setEditorContent(text);
-        markSaved();
-      });
+    return callApi('restore_last_session').then(function (restored) {
+      if (!restored) callApi('show_welcome');
+    });
   });
 });
