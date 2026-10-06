@@ -152,8 +152,20 @@ body {
   color: #1e1e1e;
 }
 
+/* Подсветка — отдельным слоем под выделением: у .cm-selectionLayer z-index: -2,
+   и непрозрачный фон самой строки его закрывает. */
 [data-theme="light"] .cm-editor .cm-activeLine {
   background: transparent;
+  position: relative;
+}
+
+[data-theme="light"] .cm-editor .cm-activeLine::after {
+  content: "";
+  position: absolute;
+  z-index: -3;
+  inset: 0;
+  background: #e8e8e8;
+  pointer-events: none;
 }
 
 [data-theme="light"] .cm-editor .cm-gutters {
