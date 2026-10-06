@@ -6,10 +6,19 @@ class AppState:
     def __init__(self):
         self.window = None
         self.current_file = None
+        # Путь документа на экране. У HTML current_file остаётся None,
+        # чтобы Ctrl+S не перезаписал файл, но сессии путь всё равно нужен.
+        self.opened_path = None
         # True, когда открыт HTML-файл (режим просмотра, только чтение)
         self.html_mode = False
         # Файл, переданный Проводником при запуске
         self.startup_file = None
+        # Сессию пишем после того, как пользователь открыл документ или начал правку.
+        # Приветственный текст сам по себе местом остановки не считается.
+        self.persist_session = False
+        # Пока документ подменяется, отложенные снимки из JS не должны затереть сессию
+        self.session_paused = False
+        self.session_epoch = 0
 
 
 state = AppState()

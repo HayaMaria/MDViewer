@@ -4,7 +4,7 @@ import webbrowser
 
 import webview
 
-from . import autosave, config, documents, export
+from . import autosave, config, documents, export, session
 from .state import state
 from .win.titlebar import set_titlebar_theme
 
@@ -45,13 +45,28 @@ class Api:
     # ===== Документ =====
 
     def open_startup_file(self):
-        """Открыть файл, переданный Проводником. False — файла нет (показать приветствие).
+        """Открыть файл, переданный Проводником. False — файла нет.
         Чтение идёт в фоне, чтобы сразу вернуть управление JS."""
         path, state.startup_file = state.startup_file, None
         if not path:
             return False
         threading.Thread(target=documents.open_path, args=(path,), daemon=True).start()
         return True
+
+    def restore_last_session(self):
+        """Открыть документ прошлого запуска. False — сессии нет."""
+        data = session.load_session()
+        if not session.is_restorable(data):
+            documents.note_missing_session_file(data)
+            return False
+        threading.Thread(target=documents.restore_session, args=(data,), daemon=True).start()
+        return True
+
+    def show_welcome(self):
+        documents.show_welcome()
+
+    def save_session(self, snapshot):
+        documents.remember_session(snapshot, from_js=True)
 
     def new_document(self):
         documents.new_document()
