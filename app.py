@@ -7,6 +7,7 @@ import webview
 
 from mdviewer import APP_TITLE, UNTITLED
 from mdviewer.api import Api
+from mdviewer.documents import request_close
 from mdviewer.paths import ICON_PATH, INDEX_HTML
 from mdviewer.state import state
 from mdviewer.win.associate import get_startup_file_path, register_file_associations
@@ -44,6 +45,8 @@ def main():
         height=800,
         resizable=True,
     )
+    # Крестик иначе закрывает окно раньше, чем страница успевает записать сессию
+    state.window.events.closing += request_close
     webview.start(debug=True)
 
 

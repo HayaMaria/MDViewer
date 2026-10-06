@@ -19,6 +19,8 @@ class AppState:
         # Пока документ подменяется, отложенные снимки из JS не должны затереть сессию
         self.session_paused = False
         self.session_epoch = 0
+        # Второе закрытие окна уже после записи сессии — его не отменяем
+        self.force_close = False
 
 
 state = AppState()

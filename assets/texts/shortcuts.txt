@@ -14,6 +14,7 @@ Ctrl+O / Cmd+O — Открыть файл
 Ctrl+S / Cmd+S — Сохранить
 Ctrl+Shift+S / Cmd+Shift+S — Сохранить как
 Ctrl+W / Cmd+W — Закрыть вкладку
+Ctrl+Q / Cmd+Q — Выход
 Ctrl+Tab / Ctrl+Shift+Tab — Следующая / предыдущая вкладка
 
 -- Форматирование --

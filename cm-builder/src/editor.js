@@ -3,6 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
 import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 import { defaultKeymap, historyKeymap, undo, redo, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import mermaid from "mermaid";
@@ -436,6 +437,37 @@ function apiCommand(method) {
   };
 }
 
+// Строки выделения. Хвост, который лишь упирается в начало следующей строки, её не захватывает.
+function selectedLineNumbers(state, range) {
+  const doc = state.doc;
+  const first = doc.lineAt(range.from).number;
+  let last = doc.lineAt(range.to).number;
+  if (last > first && range.to === doc.line(last).from) last--;
+  return [first, last];
+}
+
+// Tab добавляет один уровень отступа в каждую затронутую строку.
+// Shift+Tab (indentLess) снимает ровно этот же уровень.
+function indentSelectedLines(editor) {
+  const state = editor.state;
+  if (state.readOnly) return true;
+  const unit = state.facet(indentUnit) || "  ";
+  const changes = [];
+  const seen = new Set();
+  for (const range of state.selection.ranges) {
+    const [first, last] = selectedLineNumbers(state, range);
+    for (let n = first; n <= last; n++) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      changes.push({ from: state.doc.line(n).from, insert: unit });
+    }
+  }
+  if (!changes.length) return true;
+  const spec = state.changes(changes);
+  editor.dispatch({ changes: spec, selection: state.selection.map(spec, 1) });
+  return true;
+}
+
 // Кастомные биндинги (Mod = Ctrl на Windows/Linux, Cmd на macOS)
 // Должны идти ДО defaultKeymap, чтобы `Mod-s` переопределил стандартный save
 const customKeyBindings = [
@@ -450,18 +482,7 @@ const customKeyBindings = [
   { key: "Mod-u", run: () => { window.toggleUnderline(); return true; } },
   { key: "Mod-`", run: () => { window.toggleInlineCode(); return true; } },
   { key: "Mod-Shift-Enter", run: () => { window.insertBlankParagraph(); return true; } },
-  {
-    key: "Tab", run: () => {
-      // Вставляем символ табуляции напрямую (надёжнее indentMore для markdown)
-      const { state } = view;
-      const sel = state.selection.main;
-      view.dispatch({
-        changes: { from: sel.from, insert: "\t" },
-        selection: { anchor: sel.from + 1 },
-      });
-      return true;
-    }
-  },
+  { key: "Tab", run: indentSelectedLines },
   { key: "Shift-Tab", run: () => { indentLess(view); return true; } },
 ];
 
@@ -776,9 +797,10 @@ window.copyText = () => {
 window.pasteText = () => {
   view.focus();
   navigator.clipboard.readText().then(text => {
+    const sel = view.state.selection.main;
     view.dispatch({
-      changes: { from: view.state.selection.main.from, insert: text },
-      selection: { anchor: view.state.selection.main.from + text.length }
+      changes: { from: sel.from, to: sel.to, insert: text },
+      selection: { anchor: sel.from + text.length }
     });
   }).catch(() => { });
 };
@@ -1411,8 +1433,7 @@ window.insertText = function (text) {
   view.focus();
 };
 
-// HTML документа для экспорта: [текст](url+) превращаются в обычные <a href>,
-// nomnoml остаётся блоком кода (в экспорт библиотека не встраивается)
+// HTML документа для экспорта: [текст](url+) превращаются в обычные <a href>
 const exportRenderer = new marked.Renderer();
 exportRenderer.link = function ({ href, title, text }) {
   const cleanHref = href.endsWith("+") ? href.slice(0, -1) : href;
@@ -1423,6 +1444,7 @@ exportRenderer.code = function ({ text, lang }) {
   const info = parseFenceInfo(lang);
   if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
   if (info.type === "chart") return chartBlock(text, info.width);
+  if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
   return false;
 };
 

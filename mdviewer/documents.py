@@ -389,14 +389,34 @@ def autosave():
     return _write_editor_content(state.current_file)
 
 
+def _suggested_save_name():
+    """Имя в диалоге «Сохранить как»: файл вкладки или её заголовок.
+
+    От него удобно сделать «Отчёт 2.md» или «Новый документ 2.md», не набирая всё заново.
+    """
+    if state.current_file:
+        name = os.path.basename(state.current_file)
+    else:
+        title = getattr(state.window, 'title', '') or ''
+        prefix = f'{APP_TITLE} — '
+        name = title[len(prefix):] if title.startswith(prefix) else ''
+        name = name.strip() or UNTITLED
+    if not name.lower().endswith('.md'):
+        name += '.md'
+    return name
+
+
 def save_as(initial_dir=''):
     if state.html_mode:
         alert(READ_ONLY_MESSAGE)
         return False
+    directory = initial_dir
+    if not directory and state.current_file:
+        directory = os.path.dirname(state.current_file)
     result = state.window.create_file_dialog(
         webview.FileDialog.SAVE,
-        directory=initial_dir,
-        save_filename=f'{UNTITLED}.md',
+        directory=directory,
+        save_filename=_suggested_save_name(),
         file_types=SAVE_FILE_TYPES,
     )
     if not result or not _write_editor_content(result[0], remember=False):
@@ -448,3 +468,49 @@ def _write_editor_content_unlocked(path):
     else:
         call_js('markSavedIfUnchanged', revision)
     return True
+
+
+_close_lock = threading.Lock()
+_close_started = False
+
+
+def flush_session_now():
+    """Снимок редактора в файл сессии. Страница отдаёт его синхронно, без своего таймера."""
+    try:
+        snapshot = call_js('flushSessionNow')
+    except Exception:
+        return
+    if isinstance(snapshot, dict):
+        remember_session(snapshot, from_js=True)
+
+
+def request_close(*_args, **_kwargs):
+    """Крестик и Alt+F4. False — это закрытие отменяется.
+
+    evaluate_js прямо из обработчика closing на Windows ждёт тот же поток интерфейса
+    и окно зависает. Поэтому закрытие откладывается: сначала сессия, потом destroy.
+    """
+    global _close_started
+    if state.force_close:
+        return True
+    with _close_lock:
+        if _close_started:
+            return False
+        _close_started = True
+    threading.Thread(target=_close_after_flush, daemon=True).start()
+    return False
+
+
+def _close_after_flush():
+    global _close_started
+    try:
+        flush_session_now()
+    except Exception:
+        pass
+    state.force_close = True
+    try:
+        state.window.destroy()
+    except Exception:
+        state.force_close = False
+        with _close_lock:
+            _close_started = False
