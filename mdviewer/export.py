@@ -11,6 +11,9 @@ from .state import alert, call_js, state
 
 MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'
 CHART_CDN = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js'
+# Те же версии, что лежат в assets/lib
+GRAPHRE_CDN = 'https://cdn.jsdelivr.net/npm/graphre@0.1.2/dist/graphre.js'
+NOMNOML_CDN = 'https://cdn.jsdelivr.net/npm/nomnoml@1.5.1/dist/nomnoml.js'
 FILE_TYPES = ('HTML files (*.html)', 'All files (*.*)')
 
 
@@ -57,6 +60,7 @@ def _choose_target_path(save_dir):
 def build_html(body_html, theme, mode):
     has_mermaid = 'class="mermaid"' in body_html
     has_charts = 'data-chart-code="' in body_html
+    has_nomnoml = 'data-nomnoml-code="' in body_html
     styles = _read(CSS_DIR / 'preview.css') + _read(CSS_DIR / 'export.css')
 
     parts = [
@@ -73,6 +77,9 @@ def build_html(body_html, theme, mode):
         parts.append(_library_script('mermaid.min.js', MERMAID_CDN, mode))
     if has_charts:
         parts.append(_library_script('chart.umd.min.js', CHART_CDN, mode))
+    if has_nomnoml:
+        parts.append(_library_script('graphre.js', GRAPHRE_CDN, mode))
+        parts.append(_library_script('nomnoml.min.js', NOMNOML_CDN, mode))
     parts += ['</head>', '<body>', f'<div id="preview">{body_html}</div>']
 
     if has_mermaid:
@@ -96,9 +103,37 @@ def build_html(body_html, theme, mode):
         )
     if has_charts:
         parts.append(_inline_script(_read(BUILD_DIR / 'export-charts.js')))
+    if has_nomnoml:
+        parts.append(_nomnoml_boot(theme))
 
     parts += ['</body>', '</html>']
     return '\n'.join(parts)
+
+
+def _nomnoml_boot(theme):
+    """Отрисовать блоки nomnoml и подогнать SVG под ширину, как в превью."""
+    stroke = '#d4d4d4' if theme == 'dark' else '#333333'
+    line = '#aaaaaa' if theme == 'dark' else '#555555'
+    code = (
+        'document.querySelectorAll(".nomnoml-diagram").forEach(function(box){'
+        'var code=decodeURIComponent(box.getAttribute("data-nomnoml-code")||"");'
+        'if(!code||typeof nomnoml==="undefined")return;'
+        f'var styled="#fill: transparent\\n#stroke: {stroke}\\n#lineColor: {line}\\n"+code;'
+        'try{box.innerHTML=nomnoml.renderSvg(styled, document);}catch(e){'
+        'box.textContent=e&&e.message?e.message:String(e);return;}'
+        'var svg=box.querySelector("svg");if(!svg)return;'
+        'var w=parseInt(box.getAttribute("data-mdv-width"),10)||box.clientWidth;if(!w)return;'
+        'var vb=(svg.getAttribute("viewBox")||"").trim().split(/[\\s,]+/);'
+        'var nw=parseFloat(vb[2])||0,nh=parseFloat(vb[3])||0;'
+        'var zoom=w/600;'
+        'var draw=nw?Math.max(1,Math.round(nw*zoom)):w;'
+        'svg.setAttribute("width",String(draw));'
+        'if(nw&&nh)svg.setAttribute("height",String(Math.max(1,Math.round(nh*zoom))));'
+        'svg.style.width=draw+"px";svg.style.maxWidth="none";svg.style.height="auto";'
+        'box.style.width=draw+"px";box.style.maxWidth="none";'
+        '});'
+    )
+    return _inline_script(code)
 
 
 def _library_script(filename, cdn_url, mode):

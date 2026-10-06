@@ -378,9 +378,37 @@
     if (active >= 0) closeTab(active);
   };
 
+  function tabIndexByPath(pathKey) {
+    if (!pathKey) return -1;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].pathKey === pathKey) return i;
+    }
+    return -1;
+  }
+
+  // Один файл — одна вкладка. Чужие вкладки с тем же путём убираем без диалога:
+  // их текст уже не тот, что только что записан на диск, и сохранять его обратно нельзя.
+  function dropOtherTabsWithPath(pathKey, kept) {
+    if (!pathKey || !kept) return;
+    var next = [];
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i] !== kept && tabs[i].pathKey === pathKey) continue;
+      next.push(tabs[i]);
+    }
+    if (next.length === tabs.length) return;
+    tabs = next;
+    active = tabs.indexOf(kept);
+  }
+
   function addTab(spec) {
     welcomeTokenBump();
     var tab = makeTab(spec);
+    var existing = tabIndexByPath(tab.pathKey);
+    if (existing >= 0) {
+      if (existing !== active) switchTo(existing);
+      render();
+      return;
+    }
     if (pristineWelcomeOnly()) {
       tabs[0] = tab;
       active = 0;
@@ -405,21 +433,39 @@
   window.installTabs = function (payload) {
     welcomeTokenBump();
     var list = payload && payload.tabs ? payload.tabs : [];
-    tabs = list.map(makeTab);
-    active = tabs.length ? Math.max(0, Math.min(payload.active || 0, tabs.length - 1)) : -1;
+    var made = list.map(makeTab);
+    var wanted = made.length ? Math.max(0, Math.min(payload.active || 0, made.length - 1)) : -1;
+    var packed = [];
+    var slotOf = {};
+    var chosen = 0;
+    made.forEach(function (tab, index) {
+      var key = tab.pathKey;
+      if (!key) {
+        if (index === wanted) chosen = packed.length;
+        packed.push(tab);
+        return;
+      }
+      var slot = slotOf[key];
+      if (slot == null) {
+        slotOf[key] = packed.length;
+        if (index === wanted) chosen = packed.length;
+        packed.push(tab);
+        return;
+      }
+      if (index === wanted) {
+        packed[slot] = tab;
+        chosen = slot;
+      }
+    });
+    tabs = packed;
+    active = tabs.length ? chosen : -1;
     render();
     if (active >= 0) applyTab(tabs[active]);
   };
 
   window.focusOpenPath = function (pathKey) {
     if (!pathKey) return false;
-    var index = -1;
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].pathKey === pathKey) {
-        index = i;
-        break;
-      }
-    }
+    var index = tabIndexByPath(pathKey);
     if (index < 0) return false;
     if (index !== active) switchTo(index);
     return true;
@@ -428,6 +474,7 @@
   window.noteActivePath = function (path, title, pathKey) {
     var tab = tabs[active];
     if (!tab) return;
+    dropOtherTabsWithPath(pathKey, tab);
     tab.path = path || null;
     tab.pathKey = pathKey || null;
     tab.title = title || tab.title;
@@ -489,9 +536,41 @@
       window.answerCloseTab('cancel');
       return;
     }
-    if (modalOpen()) return;
     var mod = event.ctrlKey || event.metaKey;
+    // Выход — даже поверх диалога. Остальные сочетания диалог не перехватывает.
+    if (mod && !event.altKey && event.code === 'KeyQ' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (window.quitApp) window.quitApp();
+      return;
+    }
+    if (modalOpen()) return;
     if (!mod || event.altKey) return;
+    // Эти сочетания раньше жили только в редакторе и молчали, если фокус был на превью или в поиске.
+    if (event.code === 'KeyN' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      callApi('new_document');
+      return;
+    }
+    if (event.code === 'KeyO' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      callApi('open_document');
+      return;
+    }
+    if (event.code === 'KeyS' && event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      callApi('save_document_as');
+      return;
+    }
+    if (event.code === 'KeyS' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      callApi('save_document');
+      return;
+    }
     if (event.code === 'KeyW' && !event.shiftKey) {
       event.preventDefault();
       event.stopPropagation();

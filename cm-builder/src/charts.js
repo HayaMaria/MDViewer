@@ -72,25 +72,121 @@ function parseChartDSL(text) {
     return { type, title, xlabel, ylabel, labels: null, datasets, scatterMode: 'grouped' };
   }
 
-  const labels = [];
-  const values = [];
+  // Первый столбец — подписи, каждый следующий — свой ряд.
+  // Раньше читался только второй столбец, и «добавить ряд» в диалоге не было видно на графике.
+  const table = parseNumericTable(tableLines);
+  if (!table) return null;
+  if (table.error) return { type, title, xlabel, ylabel, labels: [], datasets: [], error: table.error };
+  return { type, title, xlabel, ylabel, labels: table.labels, datasets: table.datasets };
+}
+
+function tableCells(line) {
+  const parts = line.split("|");
+  if (parts.length && parts[0].trim() === "") parts.shift();
+  if (parts.length && parts[parts.length - 1].trim() === "") parts.pop();
+  return parts.map((cell) => cell.trim());
+}
+
+function isRuleRow(cells) {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseNumericTable(tableLines) {
+  if (!tableLines.length) return null;
+  const header = tableCells(tableLines[0]);
+  const rows = [];
   for (let i = 1; i < tableLines.length; i++) {
-    const cells = tableLines[i].split('|').filter(c => c.trim()).map(c => c.trim());
-    if (cells.length < 2) continue;
-    const val = parseFloat(cells[1]);
-    if (!isNaN(val)) {
-      labels.push(cells[0]);
-      values.push(val);
-    }
+    const cells = tableCells(tableLines[i]);
+    if (!cells.length || isRuleRow(cells)) continue;
+    rows.push(cells);
   }
-  if (labels.length === 0) {
-    // Были строки таблицы, но ни одно значение не является числом
-    if (tableLines.length > 2) {
-      return { type, title, xlabel, ylabel, labels, values, error: 'nonumeric' };
-    }
-    return null;
+  const seriesCount = Math.max(0, header.length - 1);
+  if (!seriesCount || !rows.length) return null;
+  const labels = [];
+  const datasets = [];
+  for (let col = 1; col < header.length; col++) {
+    datasets.push({ label: header[col] || ("Ряд " + col), data: [] });
   }
-  return { type, title, xlabel, ylabel, labels, values };
+  rows.forEach((cells) => {
+    const values = datasets.map((_, idx) => {
+      const n = parseFloat(cells[idx + 1]);
+      return Number.isFinite(n) ? n : null;
+    });
+    if (!values.some((n) => n !== null)) return;
+    labels.push(cells[0] || "");
+    values.forEach((n, idx) => datasets[idx].data.push(n));
+  });
+  if (!labels.length) return { error: "nonumeric" };
+  return { labels, datasets };
+}
+
+// Один ряд рисуется как раньше (у столбцов — свой цвет на каждое значение, легенда скрыта).
+// Несколько рядов — отдельный цвет и имя из шапки таблицы.
+function styledDatasets(parsed, style) {
+  const many = parsed.datasets.length > 1;
+  return parsed.datasets.map((ds, idx) => {
+    const color = COLORS[idx % COLORS.length];
+    if (!many && style === "column") {
+      return {
+        label: parsed.title || ds.label || "Values",
+        data: ds.data,
+        backgroundColor: COLORS.slice(0, parsed.labels.length),
+        borderColor: COLORS.slice(0, parsed.labels.length),
+        borderWidth: 1,
+      };
+    }
+    if (!many && style === "line") {
+      return {
+        label: parsed.title || ds.label || "Values",
+        data: ds.data,
+        borderColor: COLORS[0],
+        backgroundColor: COLORS[0] + "33",
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: COLORS[0],
+        pointBorderColor: Chart.defaults.backgroundColor,
+      };
+    }
+    if (!many && style === "pie") {
+      return {
+        data: ds.data,
+        backgroundColor: COLORS.slice(0, parsed.labels.length),
+        borderColor: Chart.defaults.backgroundColor,
+        borderWidth: 2,
+      };
+    }
+    if (!many && style === "radar") {
+      return {
+        label: parsed.title || ds.label || "Values",
+        data: ds.data,
+        backgroundColor: COLORS[0] + "33",
+        borderColor: COLORS[0],
+        pointBackgroundColor: COLORS[0],
+        pointBorderColor: Chart.defaults.backgroundColor,
+        pointRadius: 4,
+      };
+    }
+    const item = {
+      label: ds.label,
+      data: ds.data,
+      backgroundColor: style === "line" || style === "radar" ? color + "33" : color,
+      borderColor: color,
+      borderWidth: style === "pie" ? 2 : 1,
+    };
+    if (style === "line") {
+      item.fill = false;
+      item.tension = 0.3;
+      item.pointBackgroundColor = color;
+      item.pointBorderColor = Chart.defaults.backgroundColor;
+    }
+    if (style === "radar") {
+      item.pointBackgroundColor = color;
+      item.pointRadius = 4;
+      item.pointBorderColor = Chart.defaults.backgroundColor;
+    }
+    if (style === "pie") item.borderColor = Chart.defaults.backgroundColor;
+    return item;
+  });
 }
 
 function applyMediaScale(config, zoom) {
@@ -151,14 +247,10 @@ export function renderChart(codeText, containerId) {
     case 'column':
       config = {
         type: 'bar',
-        data: { labels: parsed.labels, datasets: [{
-          label: parsed.title || 'Values', data: parsed.values,
-          backgroundColor: COLORS.slice(0, parsed.labels.length),
-          borderColor: COLORS.slice(0, parsed.labels.length), borderWidth: 1,
-        }] },
+        data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'column') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: false } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
           scales: {
             y: { beginAtZero: true, grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: Chart.defaults.color } },
             x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: Chart.defaults.color } },
@@ -170,15 +262,10 @@ export function renderChart(codeText, containerId) {
     case 'line':
       config = {
         type: 'line',
-        data: { labels: parsed.labels, datasets: [{
-          label: parsed.title || 'Values', data: parsed.values,
-          borderColor: COLORS[0], backgroundColor: COLORS[0] + '33',
-          fill: true, tension: 0.3,
-          pointBackgroundColor: COLORS[0], pointBorderColor: Chart.defaults.backgroundColor,
-        }] },
+        data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'line') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: false } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
           scales: {
             y: { beginAtZero: true, grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: Chart.defaults.color } },
             x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: Chart.defaults.color } },
@@ -190,11 +277,7 @@ export function renderChart(codeText, containerId) {
     case 'pie':
       config = {
         type: 'pie',
-        data: { labels: parsed.labels, datasets: [{
-          data: parsed.values,
-          backgroundColor: COLORS.slice(0, parsed.labels.length),
-          borderColor: Chart.defaults.backgroundColor, borderWidth: 2,
-        }] },
+        data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'pie') },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
@@ -203,7 +286,7 @@ export function renderChart(codeText, containerId) {
             tooltip: {
               callbacks: {
                 label: function(ctx) {
-                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  const total = ctx.dataset.data.reduce((a, b) => a + (Number(b) || 0), 0);
                   return ctx.label + ': ' + ctx.parsed + ' (' + ((ctx.parsed / total) * 100).toFixed(1) + '%)';
                 }
               }
@@ -251,17 +334,10 @@ export function renderChart(codeText, containerId) {
     case 'radar':
       config = {
         type: 'radar',
-        data: { labels: parsed.labels, datasets: [{
-          label: parsed.title || 'Values', data: parsed.values,
-          backgroundColor: COLORS[0] + '33',
-          borderColor: COLORS[0],
-          pointBackgroundColor: COLORS[0],
-          pointBorderColor: Chart.defaults.backgroundColor,
-          pointRadius: 4,
-        }] },
+        data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'radar') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: false } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
           scales: {
             r: { grid: { color: Chart.defaults.gridColor }, angleLines: { color: Chart.defaults.gridColor }, pointLabels: { color: Chart.defaults.color }, beginAtZero: true, ticks: { display: false, stepSize: 1 } },
           },

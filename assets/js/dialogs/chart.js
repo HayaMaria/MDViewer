@@ -57,10 +57,37 @@
     return series;
   }
 
+  function chartType() {
+    return document.getElementById('chart-type').value;
+  }
+
+  // Точечный график ждёт числа X и Y. Подпись поля меняется вместе с типом.
+  function syncChartFieldLabels() {
+    var scatter = chartType() === 'scatter';
+    var label = document.getElementById('chart-categories-label');
+    var input = document.getElementById('chart-categories');
+    if (label) label.textContent = scatter ? 'Значения X' : 'Категории';
+    if (input) input.placeholder = scatter ? '1\n2\n3' : 'Категория 1\nКатегория 2\nКатегория 3';
+  }
+
+  function chartPreamble(lines) {
+    if (value('chart-title')) lines.push('title: ' + value('chart-title'));
+    if (value('chart-xlabel')) lines.push('xlabel: ' + value('chart-xlabel'));
+    if (value('chart-ylabel')) lines.push('ylabel: ' + value('chart-ylabel'));
+    var chartWidth = window.getMediaSizeSelectValue('chart-size', 'chart');
+    if (chartWidth) lines.push('width: ' + chartWidth + 'px');
+  }
+
+  function showWarning(warn, text) {
+    warn.style.display = text ? 'block' : 'none';
+    warn.textContent = text || '';
+  }
+
   // Собрать блок ```chart из полей диалога и показать его в поле «Шаблон»
   function generateChartTemplate() {
     var output = document.getElementById('chart-template');
     var warn = document.getElementById('chart-warning');
+    syncChartFieldLabels();
     var headerRow = document.getElementById('chart-header-row').checked;
     var categories = splitValues(document.getElementById('chart-categories').value, document.getElementById('chart-sep-categories').value);
     var categoryHeader = takeHeader(categories, headerRow, 'Категория');
@@ -68,16 +95,36 @@
     var points = series.reduce(function (max, s) { return Math.max(max, s.values.length); }, categories.length);
     if (!series.length || !points) {
       output.value = '';
-      warn.style.display = 'none';
+      showWarning(warn, '');
       return;
     }
 
-    var lines = ['```chart', 'type: ' + document.getElementById('chart-type').value];
-    if (value('chart-title')) lines.push('title: ' + value('chart-title'));
-    if (value('chart-xlabel')) lines.push('xlabel: ' + value('chart-xlabel'));
-    if (value('chart-ylabel')) lines.push('ylabel: ' + value('chart-ylabel'));
-    var chartWidth = window.getMediaSizeSelectValue('chart-size', 'chart');
-    if (chartWidth) lines.push('width: ' + chartWidth + 'px');
+    var lines = ['```chart', 'type: ' + chartType()];
+    chartPreamble(lines);
+
+    if (chartType() === 'scatter') {
+      // Формат превью: | X | Y | и, если рядов несколько, имя ряда в столбце «Категория»
+      var grouped = series.length > 1;
+      lines.push(grouped ? '| X | Y | Категория |' : '| X | Y |');
+      lines.push(grouped ? '| --- | --- | --- |' : '| --- | --- |');
+      series.forEach(function (s) {
+        var count = Math.max(categories.length, s.values.length);
+        for (var p = 0; p < count; p++) {
+          var x = categories[p] || '';
+          var y = s.values[p] || '';
+          if (!x && !y) continue;
+          lines.push(grouped ? '| ' + x + ' | ' + y + ' | ' + s.name + ' |' : '| ' + x + ' | ' + y + ' |');
+        }
+      });
+      lines.push('```');
+      output.value = lines.join('\n');
+      var badX = !categories.length || categories.some(function (v) { return isNaN(parseFloat(v)); });
+      var badY = series.some(function (s) { return s.values.some(function (v) { return isNaN(parseFloat(v)); }); });
+      showWarning(warn, badX
+        ? '⚠ Для точечного графика значения X должны быть числами'
+        : (badY ? '⚠ Значения Y должны быть числами — график не отобразится' : ''));
+      return;
+    }
 
     var header = [categoryHeader].concat(series.map(function (s) { return s.name; }));
     lines.push('| ' + header.join(' | ') + ' |');
@@ -93,10 +140,9 @@
     series.forEach(function (s, i) {
       if (s.values.some(function (v) { return isNaN(parseFloat(v)); })) badSeries.push(i + 1);
     });
-    warn.style.display = badSeries.length ? 'block' : 'none';
-    warn.textContent = badSeries.length
+    showWarning(warn, badSeries.length
       ? '⚠ Ряд(ы) ' + badSeries.join(', ') + ' содержат текст вместо чисел — график не отобразится'
-      : '';
+      : '');
   }
 
   ['chart-type', 'chart-title', 'chart-xlabel', 'chart-ylabel', 'chart-categories', 'chart-sep-categories', 'chart-header-row', 'chart-size'].forEach(function (id) {

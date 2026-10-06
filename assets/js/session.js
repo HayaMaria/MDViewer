@@ -155,11 +155,24 @@
     return !!(window.sessionHasDocuments && window.sessionHasDocuments());
   }
 
+  function sessionSnapshotForDisk() {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    var canFlush = !paused && (keepSession() || (tracking && !window.__htmlMode && layoutReady()));
+    if (!canFlush || (!window.__htmlMode && !layoutReady())) return null;
+    return window.captureSessionSnapshot();
+  }
+
+  // Python вызывает это при закрытии окна и ждёт уже готовый снимок
+  window.flushSessionNow = function () {
+    return sessionSnapshotForDisk();
+  };
+
   function flushSession() {
-    if (paused) return;
-    if (!keepSession() && (!tracking || window.__htmlMode)) return;
-    if (!window.__htmlMode && !layoutReady()) return;
-    callApi('save_session', window.captureSessionSnapshot());
+    var snapshot = sessionSnapshotForDisk();
+    if (snapshot) callApi('save_session', snapshot);
   }
 
   function scheduleSessionSave() {
@@ -275,15 +288,8 @@
   // Сначала записать сессию, потом закрыть окно. Иначе последний курсор
   // может не успеть дойти до диска.
   window.quitApp = function () {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    var pending = null;
-    var canFlush = !paused && (keepSession() || (tracking && !window.__htmlMode && layoutReady()));
-    if (canFlush && (window.__htmlMode || layoutReady())) {
-      pending = callApi('save_session', window.captureSessionSnapshot());
-    }
+    var snapshot = sessionSnapshotForDisk();
+    var pending = snapshot ? callApi('save_session', snapshot) : null;
     Promise.resolve(pending).then(function () {
       callApi('quit');
     }, function () {

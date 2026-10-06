@@ -32,11 +32,14 @@
     var positions = window.getSearchMatchPositions(q);
     if (!positions.length) { countEl.textContent = '0 / 0'; return; }
     var head = window.getSearchCursorPos();
-    var idx = 1;
+    // Совпадение, на котором стоит курсор, либо ближайшее позади него.
+    // До первого совпадения счётчик показывает 1 — это то, куда ведёт «далее».
+    var idx = 0;
     for (var i = 0; i < positions.length; i++) {
-      if (head >= positions[i][0] && head <= positions[i][1]) { idx = i + 1; break; }
+      if (positions[i][0] > head) break;
+      idx = i + 1;
     }
-    countEl.textContent = idx + ' / ' + positions.length;
+    countEl.textContent = (idx || 1) + ' / ' + positions.length;
   }
 
   function find(dir) {
