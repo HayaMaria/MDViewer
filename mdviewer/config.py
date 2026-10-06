@@ -24,6 +24,19 @@ MEDIA_SIZE_DEFAULTS = {
     'uml': 450,
     'chart': 600,
 }
+# Периодичность автосохранения, в секундах. 0 в настройках не хранится:
+# выключение — отдельный флаг enabled.
+AUTOSAVE_INTERVALS = (
+    (5, '5 секунд'),
+    (10, '10 секунд'),
+    (15, '15 секунд'),
+    (30, '30 секунд'),
+    (60, '1 минута'),
+    (120, '2 минуты'),
+    (300, '5 минут'),
+    (600, '10 минут'),
+)
+AUTOSAVE_DEFAULT_INTERVAL = 30
 
 
 def load_config():
@@ -79,6 +92,25 @@ def media_size_defaults(config=None):
     }
 
 
+def _clamp_autosave_interval(value):
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return AUTOSAVE_DEFAULT_INTERVAL
+    allowed = {item[0] for item in AUTOSAVE_INTERVALS}
+    return seconds if seconds in allowed else AUTOSAVE_DEFAULT_INTERVAL
+
+
+def autosave_settings(config=None):
+    """Включено ли автосохранение и как часто, в секундах."""
+    config = load_config() if config is None else config
+    saved = config.get('autosave', {})
+    return {
+        'enabled': bool(saved.get('enabled', False)),
+        'interval': _clamp_autosave_interval(saved.get('interval', AUTOSAVE_DEFAULT_INTERVAL)),
+    }
+
+
 def ui_settings():
     """Все настройки, нужные интерфейсу, одним словарём."""
     config = load_config()
@@ -92,6 +124,10 @@ def ui_settings():
         'downloads_dir': downloads_dir(),
         'media_sizes': media_size_defaults(config),
         'media_size_options': list(MEDIA_SIZE_OPTIONS),
+        'autosave': autosave_settings(config),
+        'autosave_intervals': [
+            {'value': seconds, 'label': label} for seconds, label in AUTOSAVE_INTERVALS
+        ],
     }
 
 
@@ -105,5 +141,10 @@ def save_ui_settings(settings):
     config['mediaSizes'] = {
         key: _clamp_media_size(incoming.get(key), default)
         for key, default in MEDIA_SIZE_DEFAULTS.items()
+    }
+    incoming_autosave = settings.get('autosave') or {}
+    config['autosave'] = {
+        'enabled': bool(incoming_autosave.get('enabled', False)),
+        'interval': _clamp_autosave_interval(incoming_autosave.get('interval')),
     }
     save_config(config)

@@ -9,6 +9,7 @@ onApiReady(function () {
       window.MEDIA_SIZE_OPTIONS = s.media_size_options;
     }
     window.applyMediaSizeDefaults(s.media_sizes);
+    window.applyAutosaveSettings(s.autosave);
   });
 
   // Файл из Проводника (открывает Python) или приветственный документ

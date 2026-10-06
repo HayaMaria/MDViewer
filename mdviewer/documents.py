@@ -1,5 +1,6 @@
 """Файловые операции: новый документ, открытие .md/.html, сохранение."""
 import os
+import threading
 
 import webview
 
@@ -13,6 +14,7 @@ HTML_EXTS = ('.html', '.htm')
 OPEN_FILE_TYPES = ('All files (*.*)', 'Markdown files (*.md)', 'HTML files (*.html;*.htm)')
 SAVE_FILE_TYPES = ('Markdown files (*.md)', 'All files (*.*)')
 READ_ONLY_MESSAGE = 'HTML-файл открыт в режиме только для чтения — сохранение недоступно'
+_io_lock = threading.Lock()
 
 
 def _show_document_name(name):
@@ -77,6 +79,13 @@ def save():
         save_as(config.md_save_dir())
 
 
+def autosave():
+    """Сохранить открытый файл без диалога. Новый документ и HTML пропускаются."""
+    if state.html_mode or not state.current_file:
+        return False
+    return _write_editor_content(state.current_file)
+
+
 def save_as(initial_dir=''):
     if state.html_mode:
         alert(READ_ONLY_MESSAGE)
@@ -92,13 +101,31 @@ def save_as(initial_dir=''):
         _show_document_name(os.path.basename(result[0]))
 
 
+def _editor_snapshot():
+    """Текст и номер правки на момент чтения. Номер нужен, чтобы не сбросить
+    флаг «не сохранено», если пользователь успел набрать текст во время записи."""
+    snapshot = call_js('captureEditorSnapshot')
+    if isinstance(snapshot, dict):
+        return snapshot.get('content', ''), snapshot.get('revision')
+    content = snapshot if isinstance(snapshot, str) else call_js('getEditorContent')
+    return content or '', None
+
+
 def _write_editor_content(path):
-    content = call_js('getEditorContent')
+    with _io_lock:
+        return _write_editor_content_unlocked(path)
+
+
+def _write_editor_content_unlocked(path):
+    content, revision = _editor_snapshot()
     try:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
     except OSError as e:
         alert(f'Ошибка сохранения: {e}')
         return False
-    call_js('markSaved')
+    if revision is None:
+        call_js('markSaved')
+    else:
+        call_js('markSavedIfUnchanged', revision)
     return True

@@ -46,6 +46,31 @@
     });
   }
 
+  function fillAutosaveIntervals(intervals, selected) {
+    var select = document.getElementById('settings-autosave-interval');
+    select.innerHTML = '';
+    (intervals || []).forEach(function (item) {
+      var option = document.createElement('option');
+      option.value = String(item.value);
+      option.textContent = item.label;
+      select.appendChild(option);
+    });
+    select.value = String(selected);
+    if (!select.value && select.options.length) select.selectedIndex = 0;
+  }
+
+  function syncAutosaveIntervalState() {
+    var on = document.getElementById('settings-autosave-enabled').checked;
+    document.getElementById('settings-autosave-interval').disabled = !on;
+  }
+
+  function readAutosaveSettings() {
+    return {
+      enabled: document.getElementById('settings-autosave-enabled').checked,
+      interval: parseInt(document.getElementById('settings-autosave-interval').value, 10) || 30,
+    };
+  }
+
   // ----- Настройки -----
   window.openSettingsDialog = function () {
     callApi('get_settings').then(function (s) {
@@ -60,6 +85,10 @@
         window.MEDIA_SIZE_OPTIONS = s.media_size_options;
       }
       fillSettingsSizeSelects(s.media_sizes);
+      var autosave = s.autosave || { enabled: false, interval: 30 };
+      document.getElementById('settings-autosave-enabled').checked = !!autosave.enabled;
+      fillAutosaveIntervals(s.autosave_intervals, autosave.interval);
+      syncAutosaveIntervalState();
       openModal('settings-overlay');
     });
   };
@@ -75,6 +104,7 @@
 
   window.saveSettings = function () {
     var mediaSizes = readMediaSizes();
+    var autosave = readAutosaveSettings();
     callApi('save_settings', {
       font_size: parseInt(document.getElementById('settings-font-size').value, 10) || DEFAULT_FONT_SIZE,
       export: {
@@ -84,8 +114,10 @@
       },
       md_save_dir: document.getElementById('settings-md-path').value,
       media_sizes: mediaSizes,
+      autosave: autosave,
     }).then(function () {
       window.applyMediaSizeDefaults(mediaSizes);
+      window.applyAutosaveSettings(autosave);
       closeModal('settings-overlay');
     });
   };
@@ -94,6 +126,8 @@
   document.getElementById('settings-font-size').addEventListener('input', function () {
     showFontSize(parseInt(this.value, 10) || DEFAULT_FONT_SIZE);
   });
+
+  document.getElementById('settings-autosave-enabled').addEventListener('change', syncAutosaveIntervalState);
 
   // ----- Экспортировать HTML как... -----
   window.openExportAsDialog = function () {

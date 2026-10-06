@@ -235,6 +235,17 @@
             <button class="btn btn-secondary" onclick="pickMDFolder()">Обзор...</button>
           </div>
         </div>
+        <div class="autosave-block">
+          <label class="field-label">Автосохранение</label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-autosave-enabled">
+            Сохранять изменения автоматически
+          </label>
+          <label class="autosave-row">
+            <span>Периодичность</span>
+            <select id="settings-autosave-interval" class="input" disabled></select>
+          </label>
+        </div>
         <div>
           <label class="field-label">Размер шрифта в редакторе</label>
           <div class="font-size-control">
@@ -504,6 +515,7 @@
   <script src="js/bridge.js"></script>
   <script src="js/theme.js"></script>
   <script src="js/statusbar.js"></script>
+  <script src="js/autosave.js"></script>
   <script src="js/splitter.js"></script>
   <script src="js/search.js"></script>
   <script src="js/toolbar.js"></script>
