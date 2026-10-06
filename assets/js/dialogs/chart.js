@@ -10,6 +10,7 @@
   window.openChartConfig = function () {
     seriesIndex = 0;
     document.getElementById('chart-series-list').innerHTML = '';
+    window.fillMediaSizeSelect('chart-size', window.getMediaSizeDefault('chart'));
     window.addChartSeries();
     generateChartTemplate();
     openModal('chart-config-overlay');
@@ -75,6 +76,8 @@
     if (value('chart-title')) lines.push('title: ' + value('chart-title'));
     if (value('chart-xlabel')) lines.push('xlabel: ' + value('chart-xlabel'));
     if (value('chart-ylabel')) lines.push('ylabel: ' + value('chart-ylabel'));
+    var chartWidth = window.getMediaSizeSelectValue('chart-size', 'chart');
+    if (chartWidth) lines.push('width: ' + chartWidth + 'px');
 
     var header = [categoryHeader].concat(series.map(function (s) { return s.name; }));
     lines.push('| ' + header.join(' | ') + ' |');
@@ -96,11 +99,12 @@
       : '';
   }
 
-  ['chart-type', 'chart-title', 'chart-xlabel', 'chart-ylabel', 'chart-categories', 'chart-sep-categories', 'chart-header-row'].forEach(function (id) {
+  ['chart-type', 'chart-title', 'chart-xlabel', 'chart-ylabel', 'chart-categories', 'chart-sep-categories', 'chart-header-row', 'chart-size'].forEach(function (id) {
     var el = document.getElementById(id);
     el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', generateChartTemplate);
   });
   document.getElementById('chart-sep-categories').innerHTML = SEPARATOR_OPTIONS_HTML;
+  window.fillMediaSizeSelect('chart-size', window.getMediaSizeDefault('chart'));
 
   window.runInsertChart = function () {
     insertText('\n' + (document.getElementById('chart-template').value || FALLBACK_CHART) + '\n');

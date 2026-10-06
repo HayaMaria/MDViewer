@@ -29,10 +29,12 @@ function parseChartDSL(text) {
     const titleMatch = line.match(/^title:\s*(.+)/i);
     const xlMatch = line.match(/^xlabel:\s*(.+)/i);
     const ylMatch = line.match(/^ylabel:\s*(.+)/i);
+    const widthMatch = line.match(/^width:\s*(.+)/i);
     if (typeMatch) type = typeMatch[1].trim().toLowerCase();
     else if (titleMatch) title = titleMatch[1].trim();
     else if (xlMatch) xlabel = xlMatch[1].trim();
     else if (ylMatch) ylabel = ylMatch[1].trim();
+    else if (widthMatch) { /* ширина контейнера — в editor.js */ }
     else break;
   }
 
@@ -89,6 +91,34 @@ function parseChartDSL(text) {
     return null;
   }
   return { type, title, xlabel, ylabel, labels, values };
+}
+
+function applyMediaScale(config, zoom) {
+  const z = zoom > 0 ? zoom : 1;
+  const size = Math.max(1, Math.round(16 * z));
+  const titleSize = Math.max(1, Math.round(18 * z));
+  const font = { size };
+  const titleFont = { size: titleSize };
+  const options = config.options || (config.options = {});
+  const plugins = options.plugins || (options.plugins = {});
+  if (plugins.title) plugins.title.font = titleFont;
+  if (plugins.legend) {
+    plugins.legend.labels = plugins.legend.labels || {};
+    plugins.legend.labels.font = font;
+  }
+  if (options.scales) {
+    Object.keys(options.scales).forEach((key) => {
+      const scale = options.scales[key];
+      scale.ticks = Object.assign({}, scale.ticks, { font });
+      if (scale.title) scale.title.font = font;
+      if (scale.pointLabels) scale.pointLabels.font = font;
+    });
+  }
+  ((config.data && config.data.datasets) || []).forEach((ds) => {
+    if (ds.pointRadius) ds.pointRadius = Math.max(0.5, ds.pointRadius * z);
+    if (ds.pointHoverRadius) ds.pointHoverRadius = Math.max(1, ds.pointHoverRadius * z);
+    if (ds.borderWidth) ds.borderWidth = Math.max(0.5, ds.borderWidth * z);
+  });
 }
 
 export function renderChart(codeText, containerId) {
@@ -241,6 +271,8 @@ export function renderChart(codeText, containerId) {
   }
 
   if (config) {
+    const w = parseInt(container.getAttribute("data-mdv-width"), 10) || 600;
+    applyMediaScale(config, w / 600);
     new Chart(canvas.getContext('2d'), config);
   }
 }

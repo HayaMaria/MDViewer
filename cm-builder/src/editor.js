@@ -10,8 +10,64 @@ import { Chart, registerables } from "chart.js";
 import { applyChartTheme, renderChart } from "./charts.js";
 import mermaidThemes from "../../assets/mermaid-themes.json";
 
-// Mermaid в превью всегда рисуется светлой палитрой; в тёмной теме его инвертирует CSS
+// Mermaid в превью всегда рисуется светлой палитрой; в тёмной теме его инвертирует CSS.
+// useMaxWidth:false — SVG в натуральном размере (не растягивается на 100% контейнера).
 mermaid.initialize(mermaidThemes.light);
+
+// 600 — «нормальный» масштаб Mermaid. Одно и то же число зумит все схемы одинаково:
+// текст и блоки одного размера, ширина картинки зависит от того, сколько в ней элементов.
+const MEDIA_SCALE_BASE = 600;
+
+// Число из блока или из настроек. Для «по умолчанию» читаем настройки,
+// а не текущую ширину элемента: после масштаба она уже другая.
+function diagramTargetWidth(container) {
+  if (container.getAttribute("data-size") === "default") {
+    const kind = container.getAttribute("data-kind") || "mermaid";
+    const defaults = window.__mediaSizeDefaults || { image: 500, mermaid: 600, uml: 450, chart: 600 };
+    const fromSettings = parseInt(defaults[kind], 10);
+    if (fromSettings > 0) return fromSettings;
+  }
+  const explicit = parseInt(container.getAttribute("data-mdv-width"), 10);
+  if (explicit > 0) return explicit;
+  const styled = parseInt(container.style.width, 10);
+  if (styled > 0) return styled;
+  return MEDIA_SCALE_BASE;
+}
+
+function scaleDiagramSvg(container) {
+  const svg = container.querySelector("svg");
+  if (!svg) return;
+  const target = diagramTargetWidth(container);
+  if (container.getAttribute("data-size") !== "default") {
+    container.setAttribute("data-mdv-width", String(target));
+  }
+  const zoom = target / MEDIA_SCALE_BASE;
+
+  let natW = 0;
+  let natH = 0;
+  const vb = (svg.getAttribute("viewBox") || "").trim().split(/[\s,]+/);
+  if (vb.length >= 4) {
+    natW = parseFloat(vb[2]) || 0;
+    natH = parseFloat(vb[3]) || 0;
+  }
+  if (!(natW > 0)) {
+    const aw = svg.getAttribute("width") || "";
+    const ah = svg.getAttribute("height") || "";
+    if (aw.indexOf("%") === -1) natW = parseFloat(aw) || 0;
+    if (ah.indexOf("%") === -1) natH = parseFloat(ah) || 0;
+  }
+  const drawW = natW > 0 ? Math.max(1, Math.round(natW * zoom)) : target;
+  container.style.width = drawW + "px";
+  container.style.maxWidth = "none";
+
+  svg.setAttribute("width", String(drawW));
+  if (natW > 0 && natH > 0) svg.setAttribute("height", String(Math.max(1, Math.round(natH * zoom))));
+  else svg.removeAttribute("height");
+  svg.style.width = drawW + "px";
+  svg.style.maxWidth = "none";
+  svg.style.height = "auto";
+}
+window.scaleDiagramSvg = scaleDiagramSvg;
 
 Chart.register(...registerables);
 window.Chart = Chart;
@@ -22,12 +78,104 @@ applyChartTheme(true);
 // Счётчик для уникальных id графиков
 let chartCounter = 0;
 
-function mermaidBlock(text) {
-  return `<pre class="mermaid" data-code="${encodeURIComponent(text)}">${text}</pre>`;
+// Разбор info-строки ограждения: «mermaid uml width=600px» → { type, width, isUml }
+function parseFenceInfo(lang) {
+  const parts = (lang || "").trim().split(/\s+/).filter(Boolean);
+  const type = (parts[0] || "").toLowerCase();
+  let width = null;
+  let isUml = false;
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i];
+    if (/^uml$/i.test(part)) {
+      isUml = true;
+      continue;
+    }
+    const m = part.match(/^width=(\d+)(?:px)?$/i);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n >= 50 && n <= 2000) width = n;
+    }
+  }
+  return { type, width, isUml };
 }
 
-function chartBlock(text) {
-  return `<div id="chart-${chartCounter++}" data-chart-code="${encodeURIComponent(text)}" style="min-height:300px;"></div>`;
+function extractChartWidth(text) {
+  const lines = text.trim().split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const m = line.match(/^width:\s*(\d+)(?:px)?/i);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      return n >= 50 && n <= 2000 ? n : null;
+    }
+    if (!/^(type|title|xlabel|ylabel|width):/i.test(line) && !line.startsWith("|")) break;
+  }
+  return null;
+}
+
+// Атрибуты ширины: явный px или data-size=default → CSS-переменная из настроек
+function sizeAttrs(kind, width) {
+  const styles = [];
+  if (width != null) styles.push("width:" + width + "px");
+  const styleAttr = styles.length ? ` style="${styles.join(";")}"` : "";
+  const widthData = width != null ? ` data-mdv-width="${width}"` : "";
+  const sizeData = width != null
+    ? ` data-kind="${kind}"`
+    : ` data-kind="${kind}" data-size="default"`;
+  return ` class="mdv-sized"${widthData}${styleAttr}${sizeData}`;
+}
+
+function mermaidBlock(text, width, kind) {
+  const widthData = width != null ? ` data-mdv-width="${width}" style="width:${width}px"` : ` data-size="default"`;
+  return `<pre class="mermaid mdv-sized" data-code="${encodeURIComponent(text)}" data-kind="${kind}"${widthData}>${text}</pre>`;
+}
+
+function chartBlock(text, widthFromFence) {
+  const width = widthFromFence != null ? widthFromFence : extractChartWidth(text);
+  return `<div id="chart-${chartCounter++}" data-chart-code="${encodeURIComponent(text)}"${sizeAttrs("chart", width)}></div>`;
+}
+
+function nomnomlBlock(text, width) {
+  const id = "nomnoml-" + (chartCounter++);
+  const escaped = encodeURIComponent(text);
+  const widthBits = width != null
+    ? ` data-mdv-width="${width}" style="width:${width}px;min-height:100px"`
+    : ` data-size="default" style="min-height:100px"`;
+  return `<div id="${id}" class="nomnoml-diagram mdv-sized" data-nomnoml-code="${escaped}" data-kind="uml"${widthBits}></div>`;
+}
+
+// ![alt](url){width=400px} → ширина на <img>; без указания — дефолт из настроек
+function processImageSizes(html) {
+  html = html.replace(/<img\b([^>]*?)>\s*\{width=(\d+)(?:px)?\}/gi, (_, attrs, w) => {
+    const n = parseInt(w, 10);
+    const width = n >= 50 && n <= 2000 ? n : null;
+    const cleaned = attrs.replace(/\s*class=(["'])[^"']*\1/i, "");
+    if (width != null) {
+      return `<img${cleaned} class="mdv-sized" data-kind="image" style="width:${width}px">`;
+    }
+    return `<img${cleaned} class="mdv-sized" data-kind="image" data-size="default">`;
+  });
+  return html.replace(/<img\b(?![^>]*\bmdv-sized\b)([^>]*)>/gi,
+    (_, attrs) => `<img${attrs} class="mdv-sized" data-kind="image" data-size="default">`);
+}
+
+// В экспорте подставляем фактическую ширину вместо CSS-переменных настроек
+function resolveDefaultMediaSizes(html) {
+  const defaults = Object.assign(
+    { image: 500, mermaid: 600, uml: 450, chart: 600 },
+    window.__mediaSizeDefaults || {}
+  );
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  tmp.querySelectorAll(".mdv-sized[data-size='default'][data-kind]").forEach((el) => {
+    const kind = el.getAttribute("data-kind");
+    const w = defaults[kind] != null ? defaults[kind] : 600;
+    el.style.width = w + "px";
+    el.setAttribute("data-mdv-width", String(w));
+    if (kind === "chart") el.style.height = Math.round(w * 5 / 8) + "px";
+    el.removeAttribute("data-size");
+  });
+  return tmp.innerHTML;
 }
 
 // Настройка marked:
@@ -45,13 +193,10 @@ const renderer = {
     return `<span class="external-link" data-url="${cleanHref}"${titleAttr}>${text} ↗</span>`;
   },
   code({ text, lang }) {
-    if (lang === "mermaid") return mermaidBlock(text);
-    if (lang === "chart") return chartBlock(text);
-    if (lang === "nomnoml") {
-      const id = "nomnoml-" + (chartCounter++);
-      const escaped = encodeURIComponent(text);
-      return `<div id="${id}" class="nomnoml-diagram" data-nomnoml-code="${escaped}" style="min-height:100px;"></div>`;
-    }
+    const info = parseFenceInfo(lang);
+    if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
+    if (info.type === "chart") return chartBlock(text, info.width);
+    if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
     // Для остальных блоков — пусть marked обрабатывает стандартно (возвращаем null/false)
     return false;
   },
@@ -127,7 +272,7 @@ function updatePreview(force) {
   // Текст не менялся с прошлой перестройки — перерисовывать нечего
   if (!force && content === lastPreviewContent) return;
   lastPreviewContent = content;
-  const html = marked.parse(content);
+  const html = processImageSizes(marked.parse(content));
   const previewEl = document.getElementById("preview");
 
   // ===== Сохранение позиции при перерисовке =====
@@ -176,6 +321,7 @@ function updatePreview(force) {
     const cached = svgCacheGet(key);
     if (cached !== undefined) {
       el.innerHTML = cached;
+      scaleDiagramSvg(el);
     } else {
       pendingMermaid.push(el);
     }
@@ -185,14 +331,14 @@ function updatePreview(force) {
       mermaidDone = Promise.resolve(mermaid.run({ nodes: pendingMermaid }))
         .catch(() => { })
         .then(() => {
-          // Кэшируем то, что mermaid успел отрендерить (включая SVG «ошибки
-          // синтаксиса»); необработанные блоки будут отрендерены при следующем
-          // вызове. Признак успешного рендера — наличие <svg>.
+          // Кэшируем исходный SVG (viewBox), масштаб ставим отдельно —
+          // иначе смена width подставит картинку прошлого размера.
           pendingMermaid.forEach((el) => {
             const svg = el.innerHTML;
             if (svg && svg.indexOf("<svg") !== -1) {
               svgCachePut(makeDiagramSignature("mermaid", el.dataset.code || "", false), svg);
             }
+            scaleDiagramSvg(el);
           });
         });
     } catch (e) { }
@@ -203,6 +349,11 @@ function updatePreview(force) {
   previewEl.querySelectorAll("[id^='chart-']").forEach((el) => {
     const code = decodeURIComponent(el.dataset.chartCode || "");
     if (code) {
+      const w = diagramTargetWidth(el);
+      el.setAttribute("data-mdv-width", String(w));
+      el.style.width = w + "px";
+      el.style.maxWidth = "none";
+      el.style.height = Math.round(w * 5 / 8) + "px";
       renderChart(code, el.id);
     }
   });
@@ -215,6 +366,7 @@ function updatePreview(force) {
     const cached = svgCacheGet(key);
     if (cached !== undefined) {
       el.innerHTML = cached;
+      scaleDiagramSvg(el);
       return;
     }
     if (typeof window.renderNomnoml === "function") {
@@ -222,6 +374,7 @@ function updatePreview(force) {
         window.renderNomnoml(el, code);
         if (el.innerHTML.indexOf("<svg") !== -1) {
           svgCachePut(key, el.innerHTML);
+          scaleDiagramSvg(el);
         }
       } catch (e) {
         el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
@@ -257,6 +410,13 @@ function updatePreview(force) {
   bindPreviewLinks(previewEl, ".external-link", "open_external");
   bindPreviewLinks(previewEl, ".app-link", "open_in_app_window");
 }
+
+// Настройки размера по умолчанию применяются к уже открытому документу
+window.refreshPreviewMedia = function () {
+  if (!view) return;
+  lastPreviewContent = null;
+  updatePreview(true);
+};
 
 function bindPreviewLinks(previewEl, selector, apiMethod) {
   previewEl.querySelectorAll(selector).forEach((el) => {
@@ -1148,15 +1308,25 @@ window.insertLink = function () {
 
 window.insertImage = function () {
   view.focus();
+  const width = (typeof window.getMediaSizeDefault === "function"
+    ? window.getMediaSizeDefault("image")
+    : 100);
+  const sizeSuffix = "{width=" + width + "px}";
   const { from, to, text } = inlineSelectionText(view.state);
   if (!text) {
-    const insert = '![подпись](image.jpg)';
+    const insert = "![подпись](image.jpg)" + sizeSuffix;
     applyFormatting({ from: to, insert }, { anchor: to + 2, head: to + 9 });
   } else if (URL_RE.test(text)) {
-    applyFormatting({ from, to, insert: '![подпись](' + text + ')' }, { anchor: from + 2, head: from + 9 });
+    applyFormatting(
+      { from, to, insert: "![подпись](" + text + ")" + sizeSuffix },
+      { anchor: from + 2, head: from + 9 }
+    );
   } else {
-    const insert = '![' + text + '](url)';
-    applyFormatting({ from, to, insert }, { anchor: from + text.length + 4, head: from + text.length + 7 });
+    const insert = "![" + text + "](url)" + sizeSuffix;
+    applyFormatting(
+      { from, to, insert },
+      { anchor: from + text.length + 4, head: from + text.length + 7 }
+    );
   }
 };
 
@@ -1206,11 +1376,13 @@ exportRenderer.link = function ({ href, title, text }) {
   return `<a href="${cleanHref}"${titleAttr} target="_blank">${text}</a>`;
 };
 exportRenderer.code = function ({ text, lang }) {
-  if (lang === "mermaid") return mermaidBlock(text);
-  if (lang === "chart") return chartBlock(text);
+  const info = parseFenceInfo(lang);
+  if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
+  if (info.type === "chart") return chartBlock(text, info.width);
   return false;
 };
 
 window.getRenderedBodyHTMLExport = () =>
-  marked.parse(view.state.doc.toString(), { renderer: exportRenderer });
-
+  resolveDefaultMediaSizes(
+    processImageSizes(marked.parse(view.state.doc.toString(), { renderer: exportRenderer }))
+  );

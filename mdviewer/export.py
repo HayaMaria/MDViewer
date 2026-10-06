@@ -80,7 +80,19 @@ def build_html(body_html, theme, mode):
             mermaid_config = json.dumps(json.load(f)[theme])
         parts.append(
             f'<script>mermaid.initialize({mermaid_config});'
-            'mermaid.run({querySelector:".mermaid"});</script>'
+            'mermaid.run({querySelector:".mermaid"}).then(function(){'
+            'document.querySelectorAll(".mermaid").forEach(function(box){'
+            'var svg=box.querySelector("svg");if(!svg)return;'
+            'var w=parseInt(box.getAttribute("data-mdv-width"),10)||box.clientWidth;if(!w)return;'
+            'var vb=(svg.getAttribute("viewBox")||"").trim().split(/[\\s,]+/);'
+            'var nw=parseFloat(vb[2])||0,nh=parseFloat(vb[3])||0;'
+            'var BASE=600;'
+            'var draw=nw?Math.max(1,Math.round(nw*w/BASE)):w;'
+            'svg.setAttribute("width",draw);'
+            'if(nw&&nh)svg.setAttribute("height",Math.max(1,Math.round(nh*w/BASE)));'
+            'svg.style.width=draw+"px";svg.style.maxWidth="none";svg.style.height="auto";'
+            'box.style.width=draw+"px";box.style.maxWidth="none";'
+            '});});</script>'
         )
     if has_charts:
         parts.append(_inline_script(_read(BUILD_DIR / 'export-charts.js')))

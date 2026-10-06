@@ -2,6 +2,12 @@
 (function () {
   var DEFAULT_FONT_SIZE = 15;
   var savedFontSize = DEFAULT_FONT_SIZE;
+  var SIZE_SELECTS = {
+    image: 'settings-size-image',
+    mermaid: 'settings-size-mermaid',
+    uml: 'settings-size-uml',
+    chart: 'settings-size-chart',
+  };
 
   function setRadio(name, value) {
     document.querySelectorAll('input[name="' + name + '"]').forEach(function (r) {
@@ -25,6 +31,21 @@
     window.setEditorFontSize(size);
   }
 
+  function readMediaSizes() {
+    var sizes = {};
+    Object.keys(SIZE_SELECTS).forEach(function (key) {
+      var n = parseInt(document.getElementById(SIZE_SELECTS[key]).value, 10);
+      sizes[key] = window.MEDIA_SIZE_OPTIONS.indexOf(n) >= 0 ? n : window.MEDIA_SIZE_DEFAULTS[key];
+    });
+    return sizes;
+  }
+
+  function fillSettingsSizeSelects(sizes) {
+    Object.keys(SIZE_SELECTS).forEach(function (key) {
+      window.fillMediaSizeSelect(SIZE_SELECTS[key], (sizes && sizes[key]) || window.MEDIA_SIZE_DEFAULTS[key]);
+    });
+  }
+
   // ----- Настройки -----
   window.openSettingsDialog = function () {
     callApi('get_settings').then(function (s) {
@@ -35,6 +56,10 @@
       savedFontSize = s.font_size;
       document.getElementById('settings-font-size').value = s.font_size;
       showFontSize(s.font_size);
+      if (s.media_size_options && s.media_size_options.length) {
+        window.MEDIA_SIZE_OPTIONS = s.media_size_options;
+      }
+      fillSettingsSizeSelects(s.media_sizes);
       openModal('settings-overlay');
     });
   };
@@ -49,6 +74,7 @@
   window.pickMDFolder = function () { pickFolderInto('settings-md-path'); };
 
   window.saveSettings = function () {
+    var mediaSizes = readMediaSizes();
     callApi('save_settings', {
       font_size: parseInt(document.getElementById('settings-font-size').value, 10) || DEFAULT_FONT_SIZE,
       export: {
@@ -57,7 +83,9 @@
         save_path: document.getElementById('settings-export-path').value,
       },
       md_save_dir: document.getElementById('settings-md-path').value,
+      media_sizes: mediaSizes,
     }).then(function () {
+      window.applyMediaSizeDefaults(mediaSizes);
       closeModal('settings-overlay');
     });
   };

@@ -62,20 +62,25 @@ def hello():
 
 В квадратных скобках — подпись (показывается, если картинка не загрузилась; можно оставить пустой).
 В круглых — путь к файлу.
+Размер задаётся после ссылки: `{width=500px}` (от 200px до 1000px, шаг 50px).
+Кнопка 🖼 на панели вставляет шаблон уже с размером из настроек.
 
-**Локальное** — `![](img/файл.jpg)`:
+**Локальное** — `![](img/файл.jpg){width=500px}`:
 
-![](img/Kitty.jpg)
+![](img/Kitty.jpg){width=400px}
 
-**Из интернета** — `![](https://...)`:
+**Из интернета** — `![](https://...){width=500px}`:
 
-![](https://i.pinimg.com/originals/a3/03/d6/a303d69ba18fbb210db1afb87706c69e.jpg?nii=t)
+![](https://i.pinimg.com/originals/a3/03/d6/a303d69ba18fbb210db1afb87706c69e.jpg?nii=t){width=350px}
 
 ---
 
 ## Схемы (Mermaid)
 
 Блок ```mermaid — для рисования схем, графов, блок-схем.
+Размер указывается в info-строке, например: mermaid width=600px.
+Если `width` не указан, берётся значение из Настроек → Mermaid-диаграммы.
+Кнопка ◇ открывает диалог: тип, содержимое и размер (сразу подставляется дефолт из настроек).
 
 ### Как писать
 
@@ -112,7 +117,7 @@ def hello():
 
 ### Простой пример
 
-```mermaid
+```mermaid width=800px
 graph TD
     A[Начало] --> B{Есть интернет?}
     B -->|Да| C[Загрузить страницу]
@@ -123,7 +128,7 @@ graph TD
 
 ### Слева направо
 
-```mermaid
+```mermaid width=700px
 graph LR
     A[Идея] --> B[Прототип]
     B --> C[Разработка]
@@ -132,7 +137,7 @@ graph LR
 
 ### Сверху вниз с подписями
 
-```mermaid
+```mermaid width=750px
 graph TD
     A[Пользователь] -- Вводит логин --> B{Проверка}
     B -- Верно --> C[Впустить]
@@ -141,7 +146,7 @@ graph TD
 
 ### Пунктирные и толстые стрелки
 
-```mermaid
+```mermaid width=650px
 graph LR
     A[Идея] -.-> B[Черновик]
     B ==> C[Финальная версия]
@@ -153,11 +158,14 @@ graph LR
 ## UML-диаграммы
 
 Блоки ```mermaid и ```nomnoml — для UML-диаграмм.
-Удобно вставлять кнопкой ◉ на панели инструментов — откроется диалог с шаблонами.
+Удобно вставлять кнопкой ◉ на панели инструментов — откроется диалог с шаблонами и выбором размера.
+Размер: `mermaid uml width=500px` или `nomnoml width=450px` в info-строке блока.
+Метка `uml` у Mermaid-блока связывает его с настройкой «UML-диаграммы».
+Без `width` используется размер из Настроек → UML-диаграммы.
 
 ### Последовательности (sequenceDiagram)
 
-```mermaid
+```mermaid uml width=500px
 sequenceDiagram
     participant U as Пользователь
     participant S as Сервер
@@ -167,7 +175,7 @@ sequenceDiagram
 
 ### Классов (classDiagram)
 
-```mermaid
+```mermaid uml width=400px
 classDiagram
     class Animal {
         +String name
@@ -181,7 +189,7 @@ classDiagram
 
 ### Состояний (stateDiagram)
 
-```mermaid
+```mermaid uml width=320px
 stateDiagram
     [*] --> Idle
     Idle --> Running
@@ -190,7 +198,7 @@ stateDiagram
 
 ### Временная линия (timeline)
 
-```mermaid
+```mermaid uml width=500px
 timeline
     title История
     2020: Запуск
@@ -200,7 +208,7 @@ timeline
 
 ### Use Case (nomnoml)
 
-```nomnoml
+```nomnoml width=500px
 [Пользователь] -> [Войти]
 [Пользователь] -> [Смотреть]
 [Админ] -> [Управлять]
@@ -208,7 +216,7 @@ timeline
 
 ### Activity (nomnoml)
 
-```nomnoml
+```nomnoml width=450px
 [start] -> [Шаг 1]
 [Шаг 1] -> [Шаг 2]
 [Шаг 2] -> [end]
@@ -216,7 +224,7 @@ timeline
 
 ### Component (nomnoml)
 
-```nomnoml
+```nomnoml width=550px
 [Клиент] <-> [API]
 [API] <-> [Сервис]
 [Сервис] <-> [(База данных)]
@@ -224,7 +232,7 @@ timeline
 
 ### Package (nomnoml)
 
-```nomnoml
+```nomnoml width=600px
 [Клиентский слой]
 [Бизнес-логика]
 [Слой данных]
@@ -237,6 +245,8 @@ timeline
 ## Диаграммы (графики)
 
 Блок ```chart — для построения графиков по таблице.
+Размер задаётся строкой `width: 600px` среди настроек блока (или берётся из Настроек → Графики).
+Кнопка 📊 открывает диалог: тип, данные и размер.
 
 **Типы графиков:**
 - `type: column` — столбчатая
@@ -249,6 +259,7 @@ timeline
 
 ```chart
 type: column
+width: 800px
 title: Продажи по месяцам
 xlabel: Месяц
 ylabel: Тыс. руб.
@@ -266,6 +277,7 @@ ylabel: Тыс. руб.
 
 ```chart
 type: line
+width: 750px
 title: Температура за неделю
 xlabel: День недели
 ylabel: Градусы
@@ -284,6 +296,7 @@ ylabel: Градусы
 
 ```chart
 type: pie
+width: 500px
 title: Бюджет проекта
 | Статья       | Тыс.руб |
 |--------------|---------|
@@ -298,6 +311,7 @@ title: Бюджет проекта
 
 ```chart
 type: scatter
+width: 850px
 title: Время загрузки vs Пользователи
 xlabel: Пользователи (тыс.)
 ylabel: Время (с)
@@ -378,6 +392,7 @@ ylabel: Время (с)
 
 ```chart
 type: radar
+width: 550px
 title: Навыки
 | Навык       | Оценка |
 |-------------|--------|

@@ -16,6 +16,14 @@ EXPORT_DEFAULTS = {
     'theme': 'current',
     'save_path': '',
 }
+# Доступные ширины медиа (изображения, схемы, диаграммы, графики), в px
+MEDIA_SIZE_OPTIONS = tuple(range(200, 1001, 50))
+MEDIA_SIZE_DEFAULTS = {
+    'image': 500,
+    'mermaid': 600,
+    'uml': 450,
+    'chart': 600,
+}
 
 
 def load_config():
@@ -53,6 +61,24 @@ def md_save_dir():
     return path if os.path.isdir(path) else downloads_dir()
 
 
+def _clamp_media_size(value, fallback):
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return size if size in MEDIA_SIZE_OPTIONS else fallback
+
+
+def media_size_defaults(config=None):
+    """Ширины по умолчанию для изображений / Mermaid / UML / графиков."""
+    config = load_config() if config is None else config
+    saved = config.get('mediaSizes', {})
+    return {
+        key: _clamp_media_size(saved.get(key), default)
+        for key, default in MEDIA_SIZE_DEFAULTS.items()
+    }
+
+
 def ui_settings():
     """Все настройки, нужные интерфейсу, одним словарём."""
     config = load_config()
@@ -64,6 +90,8 @@ def ui_settings():
         'export': export_settings(config),
         'md_save_dir': config.get('save', {}).get('default_path', ''),
         'downloads_dir': downloads_dir(),
+        'media_sizes': media_size_defaults(config),
+        'media_size_options': list(MEDIA_SIZE_OPTIONS),
     }
 
 
@@ -73,4 +101,9 @@ def save_ui_settings(settings):
     config['fontSize'] = int(settings['font_size'])
     config['export'] = {key: settings['export'].get(key, default) for key, default in EXPORT_DEFAULTS.items()}
     config['save'] = {'default_path': settings.get('md_save_dir', '')}
+    incoming = settings.get('media_sizes') or {}
+    config['mediaSizes'] = {
+        key: _clamp_media_size(incoming.get(key), default)
+        for key, default in MEDIA_SIZE_DEFAULTS.items()
+    }
     save_config(config)

@@ -27,24 +27,47 @@
     });
   }
 
-  function insertDiagram(lang, header, content) {
+  function insertDiagram(lang, header, content, opts) {
+    opts = opts || {};
+    var info = lang;
+    if (opts.uml) info += ' uml';
+    if (opts.width) info += ' width=' + opts.width + 'px';
     var body = trimBlankLines(content);
-    insertText('\n```' + lang + '\n' + (header ? header + '\n' : '') + body + '\n```\n');
+    insertText('\n```' + info + '\n' + (header ? header + '\n' : '') + body + '\n```\n');
   }
 
   bindPresets('mermaid-type', 'mermaid-content', MERMAID_PRESETS);
   bindPresets('uml-type', 'uml-content', UML_PRESETS);
 
+  window.openMermaidConfig = function () {
+    window.fillMediaSizeSelect('mermaid-size', window.getMediaSizeDefault('mermaid'));
+    openModal('mermaid-config-overlay');
+  };
+
+  window.openUmlConfig = function () {
+    window.fillMediaSizeSelect('uml-size', window.getMediaSizeDefault('uml'));
+    openModal('uml-config-overlay');
+  };
+
   window.runInsertMermaid = function () {
-    insertDiagram('mermaid', document.getElementById('mermaid-type').value, document.getElementById('mermaid-content').value);
+    insertDiagram(
+      'mermaid',
+      document.getElementById('mermaid-type').value,
+      document.getElementById('mermaid-content').value,
+      { width: window.getMediaSizeSelectValue('mermaid-size', 'mermaid') }
+    );
     closeModal('mermaid-config-overlay');
   };
 
   window.runInsertUml = function () {
     var type = document.getElementById('uml-type').value;
     var content = document.getElementById('uml-content').value;
-    if (type.indexOf('nomnoml:') === 0) insertDiagram('nomnoml', '', content);
-    else insertDiagram('mermaid', type, content);
+    var width = window.getMediaSizeSelectValue('uml-size', 'uml');
+    if (type.indexOf('nomnoml:') === 0) {
+      insertDiagram('nomnoml', '', content, { width: width });
+    } else {
+      insertDiagram('mermaid', type, content, { uml: true, width: width });
+    }
     closeModal('uml-config-overlay');
   };
 })();
