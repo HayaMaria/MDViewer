@@ -583,6 +583,13 @@
       callApi('new_document');
       return;
     }
+    // Ctrl+U в WebView — «исходный код страницы», до редактора сочетание не доходит.
+    if (event.code === 'KeyU' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!window.__htmlMode && window.toggleUnderline) window.toggleUnderline();
+      return;
+    }
     if (event.key === 'Tab' && tabs.length > 1) {
       event.preventDefault();
       event.stopPropagation();
