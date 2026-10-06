@@ -1161,8 +1161,16 @@ function wrapSelection(before, after) {
   }
 
   const first = segments[0], lastIdx = segments.length - 1, last = segments[lastIdx];
-  const from = newPos(0, first.selected[0], 'start');
-  const to = newPos(lastIdx, last.selected[last.selected.length - 1], 'end');
+  let from = newPos(0, first.selected[0], 'start');
+  let to = newPos(lastIdx, last.selected[last.selected.length - 1], 'end');
+  // Выделение шире значимых символов: маркер списка, цитата, отступ и уже
+  // стоящие маркеры. Если оно доходит до края перестроенного участка или
+  // выходит за него, граница остаётся на этом крае — в том числе после
+  // повторного форматирования, когда хвост строки состоит из маркеров.
+  const selFrom = Math.min(sel.anchor, sel.head);
+  const selTo = Math.max(sel.anchor, sel.head);
+  if (selFrom <= rebuilt[0].change.from) from = Math.min(from, set.mapPos(selFrom, -1));
+  if (selTo >= rebuilt[lastIdx].change.to) to = Math.max(to, set.mapPos(selTo, 1));
   applyFormatting(set, sel.anchor <= sel.head ? { anchor: from, head: to } : { anchor: to, head: from });
 }
 
