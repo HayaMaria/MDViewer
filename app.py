@@ -13,6 +13,44 @@ from mdviewer.state import state
 from mdviewer.win.associate import get_startup_file_path, register_file_associations
 
 
+# Ссылка на обработчик, иначе pythonnet соберёт его сборщиком мусора.
+_accelerator_handlers = []
+
+
+def _keep_ctrl_u_for_editor():
+    # debug=True включает браузерные сочетания WebView, и Ctrl+U открывает исходный код
+    # страницы, не доходя до редактора. Отменяем только это сочетание и вызываем подчёркивание.
+    if _accelerator_handlers:
+        return
+    native = getattr(state.window, 'native', None)
+    control = getattr(native, 'webview', None) if native else None
+    if control is None:
+        return
+    try:
+        controller = control.CoreWebView2Controller
+        from System.Windows.Forms import Control, Keys
+    except Exception:
+        logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller', exc_info=True)
+        return
+
+    def on_accelerator(sender, args):
+        try:
+            if int(args.KeyEventKind) != 0 or int(args.VirtualKey) != 0x55:
+                return
+            mods = int(Control.ModifierKeys)
+            if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)) or (mods & int(Keys.Shift)):
+                return
+            args.Handled = True
+            control.CoreWebView2.ExecuteScriptAsync(
+                'if(!window.__htmlMode&&window.toggleUnderline)window.toggleUnderline()'
+            )
+        except Exception:
+            logging.getLogger(__name__).warning('Ctrl+U: не удалось вставить подчёркивание', exc_info=True)
+
+    _accelerator_handlers.append(on_accelerator)
+    controller.AcceleratorKeyPressed += on_accelerator
+
+
 def silence_http_server_logs():
     # Bottle и wsgiref пишут прямо в stderr, а не через logging
     logging.getLogger('bottle').setLevel(logging.WARNING)
@@ -47,6 +85,7 @@ def main():
     )
     # Крестик иначе закрывает окно раньше, чем страница успевает записать сессию
     state.window.events.closing += request_close
+    state.window.events.loaded += _keep_ctrl_u_for_editor
     webview.start(debug=True)
 
 

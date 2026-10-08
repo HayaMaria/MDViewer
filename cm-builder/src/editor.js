@@ -4,7 +4,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
 import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
 import { indentUnit } from "@codemirror/language";
-import { defaultKeymap, historyKeymap, undo, redo, indentLess } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import mermaid from "mermaid";
 import { Chart, registerables } from "chart.js";
@@ -597,6 +597,7 @@ const editorExtensions = [
       schedulePreviewUpdate();
       // Помечаем как несохранённое при изменении документа
       if (window.markUnsaved) window.markUnsaved();
+      syncHistoryButtons(update.state);
     }
     // Обновляем позицию курсора при любом изменении выделения или документа
     if (update.selectionSet || update.docChanged) {
@@ -633,6 +634,7 @@ function reapplyEditorFontSize() {
 function finishDocumentSwap() {
   reapplyEditorFontSize();
   updatePreview();
+  syncHistoryButtons(view.state);
   document.dispatchEvent(new CustomEvent("mdv-document-replaced"));
 }
 
@@ -766,6 +768,14 @@ window.setEditorContent = (text) => {
 };
 
 // ===== Команды правки (кнопки тулбара) =====
+
+// Серые кнопки, когда в истории вкладки нечего отменять или повторять.
+function syncHistoryButtons(state) {
+  const undoBtn = document.getElementById("undo-btn");
+  const redoBtn = document.getElementById("redo-btn");
+  if (undoBtn) undoBtn.disabled = undoDepth(state) === 0;
+  if (redoBtn) redoBtn.disabled = redoDepth(state) === 0;
+}
 
 // Отменить последнее действие
 window.undoEditor = () => undo(view);
