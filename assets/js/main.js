@@ -13,11 +13,23 @@ onApiReady(function () {
     window.applyAutosaveSettings(s.autosave);
   });
 
-  // Файл из Проводника важнее сессии. Иначе — документ, на котором остановились.
+  callApi('window_id').then(function (id) {
+    if (id) window.__windowId = id;
+  });
+
+  // Файл из Проводника важнее сессии. Иначе — вкладка, перенесённая в это окно,
+  // документ прошлого сеанса или приветствие.
   callApi('open_startup_file').then(function (opened) {
     if (opened) return;
-    return callApi('restore_last_session').then(function (restored) {
-      if (!restored) callApi('show_welcome');
+    return callApi('claim_launch').then(function (launch) {
+      if (launch && launch.tabs && launch.tabs.length && window.installTabs) {
+        window.installTabs(launch);
+        if (window.persistOpenTabs) window.persistOpenTabs();
+        return;
+      }
+      return callApi('restore_last_session').then(function (restored) {
+        if (!restored) callApi('show_welcome');
+      });
     });
   });
 });
