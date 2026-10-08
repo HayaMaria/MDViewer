@@ -46,9 +46,10 @@
 }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 
-/* Дорожка прокрутки в цвет фона своей панели */
-#editor { --scrollbar-track: #282c34; } /* фон темы oneDark */
-[data-theme="light"] #editor { --scrollbar-track: #fafafa; }
+/* Дорожка прокрутки в цвет фона своей панели.
+   Фон самой панели тоже задаём здесь: иначе просвечивает белый фон страницы. */
+#editor { --scrollbar-track: #282c34; background: #282c34; } /* фон темы oneDark */
+[data-theme="light"] #editor { --scrollbar-track: #fafafa; background: #fafafa; }
 #preview { --scrollbar-track: var(--bg); }
 
 html,
@@ -118,32 +119,28 @@ body {
 [data-theme="light"] .splitter:hover,
 [data-theme="light"] .splitter.active { background: #999; }
 
-/* Принуждаем CodeMirror подстраиваться под ширину родителя.
-   Высота — на всю панель: иначе .cm-editor сжимается по тексту, и пунктирная
-   рамка фокуса (outline у .cm-focused) оказывается сразу под последней строкой. */
+/* Редактор на всю панель. Ширину .cm-content не фиксируем:
+   при переносе строк width:100% вместе с колонкой номеров
+   уводит правый край строки за край панели, и текст там пропадает. */
 #editor .cm-editor,
-#editor .cm-scroller,
-#editor .cm-content {
+#editor .cm-scroller {
   max-width: 100% !important;
   min-width: 0 !important;
   width: 100% !important;
+}
+#editor .cm-content {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
 }
 #editor .cm-editor {
   height: 100%;
   outline: none;
 }
-#editor .cm-content {
-  box-sizing: border-box !important;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: normal;
-  padding-right: 32px !important;
-}
 #editor .cm-scroller {
   height: 100% !important;
   overflow-x: hidden !important;
   contain: none !important;
-  scrollbar-gutter: stable !important;
 }
 
 /* CodeMirror — светлая тема */
