@@ -265,6 +265,7 @@ body {
 
 /* ===== Вкладки ===== */
 #tab-bar {
+  position: relative;
   display: flex;
   align-items: stretch;
   height: 34px;
@@ -273,6 +274,26 @@ body {
   border-bottom: 1px solid var(--toolbar-border);
   user-select: none;
 }
+
+#tab-drop-mark {
+  display: none;
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 3;
+}
+
+#tab-drop-mark.visible { display: block; }
+
+.tab.dragging { opacity: 0.35; }
+
+body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
 
 #tab-list {
   display: flex;
@@ -296,7 +317,7 @@ body {
   border-right: 1px solid var(--toolbar-border);
   background: transparent;
   color: #9a9a9a;
-  cursor: pointer;
+  cursor: grab;
   font-size: 12px;
   line-height: 16px;
 }

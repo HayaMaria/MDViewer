@@ -53,10 +53,17 @@ def _fire():
         _timer = None
         if not _enabled:
             return
-    try:
-        documents.autosave()
-        dirty = bool(call_js('isDocumentDirty'))
-    except Exception:
-        dirty = False
-    if dirty and state.current_file and not state.html_mode:
+    from .state import bind_slot, unbind_slot
+    dirty = False
+    for slot in state.iter_slots():
+        token = bind_slot(slot)
+        try:
+            documents.autosave()
+            if call_js('isDocumentDirty') and state.current_file and not state.html_mode:
+                dirty = True
+        except Exception:
+            pass
+        finally:
+            unbind_slot(token)
+    if dirty:
         arm()

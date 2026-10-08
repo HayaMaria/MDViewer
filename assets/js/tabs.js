@@ -166,6 +166,7 @@
       item.appendChild(dot);
       item.appendChild(name);
       item.appendChild(close);
+      item.addEventListener('pointerdown', function (event) { startTabDrag(event, item, tab); });
       item.addEventListener('click', function () { switchTo(index); });
       item.addEventListener('auxclick', function (event) {
         if (event.button !== 1) return;
@@ -463,6 +464,10 @@
     if (active >= 0) applyTab(tabs[active]);
   };
 
+  window.persistOpenTabs = function () {
+    return persistActive();
+  };
+
   window.focusOpenPath = function (pathKey) {
     if (!pathKey) return false;
     var index = tabIndexByPath(pathKey);
@@ -524,6 +529,339 @@
     tab.welcome = false;
     paintDirty();
   };
+
+  var suppressClick = false;
+  var detachBusy = false;
+
+  document.addEventListener('click', function (event) {
+    if (!suppressClick) return;
+    suppressClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+
+  function ensureDropMark() {
+    var bar = document.getElementById('tab-bar');
+    if (!bar || document.getElementById('tab-drop-mark')) return;
+    var mark = document.createElement('div');
+    mark.id = 'tab-drop-mark';
+    bar.appendChild(mark);
+  }
+
+  function hideDropMark() {
+    var mark = document.getElementById('tab-drop-mark');
+    if (mark) mark.classList.remove('visible');
+  }
+
+  function placeDropMark(index) {
+    ensureDropMark();
+    var mark = document.getElementById('tab-drop-mark');
+    var bar = document.getElementById('tab-bar');
+    var list = document.getElementById('tab-list');
+    if (!mark || !bar || !list) return;
+    var barRect = bar.getBoundingClientRect();
+    var nodes = list.querySelectorAll('.tab');
+    var x = 0;
+    if (nodes.length) {
+      if (index <= 0) x = nodes[0].getBoundingClientRect().left - barRect.left;
+      else if (index >= nodes.length) {
+        x = nodes[nodes.length - 1].getBoundingClientRect().right - barRect.left;
+      } else x = nodes[index].getBoundingClientRect().left - barRect.left;
+    }
+    mark.style.left = x + 'px';
+    mark.classList.add('visible');
+  }
+
+  function rawInsertIndex(clientX) {
+    var list = document.getElementById('tab-list');
+    var nodes = list ? list.querySelectorAll('.tab') : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var rect = nodes[i].getBoundingClientRect();
+      if (clientX < rect.left + rect.width / 2) return i;
+    }
+    return nodes.length;
+  }
+
+  function overOwnTabBar(clientX, clientY) {
+    var bar = document.getElementById('tab-bar');
+    if (!bar) return false;
+    var rect = bar.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function exportTab(tab) {
+    if (tabs[active] === tab) snapshotActive();
+    return {
+      html: !!tab.html,
+      htmlContent: tab.htmlContent || '',
+      path: tab.path || null,
+      pathKey: tab.pathKey || null,
+      title: tab.title,
+      welcome: !!(tab.welcome && !tab.dirty && !tab.path),
+      dirty: !!(tab.dirty && !tab.html),
+      text: tab.html ? '' : (tab.content || ''),
+      anchor: tab.anchor || 0,
+      head: tab.head || 0,
+      scroll: tab.scroll || 0,
+      previewScroll: tab.previewScroll || 0,
+    };
+  }
+
+  function takeTabOut(index) {
+    if (index < 0 || index >= tabs.length) return Promise.resolve(null);
+    var spec = exportTab(tabs[index]);
+    var closingActive = index === active;
+    if (!closingActive) snapshotActive();
+    tabs.splice(index, 1);
+    if (!tabs.length) {
+      active = -1;
+      switching = false;
+      render();
+      return callApi('forget_window_session').then(function () { return spec; }, function () { return spec; });
+    }
+    if (closingActive) {
+      active = Math.min(index, tabs.length - 1);
+      switching = true;
+      try {
+        applyTab(tabs[active]);
+      } catch (error) {
+        switching = false;
+      }
+    } else if (index < active) {
+      active -= 1;
+    }
+    render();
+    return persistActive().then(function () {
+      switching = false;
+      return spec;
+    }, function () {
+      switching = false;
+      return spec;
+    });
+  }
+
+  function reorderTab(from, rawTo) {
+    var to = rawTo > from ? rawTo - 1 : rawTo;
+    if (to < 0) to = 0;
+    if (to > tabs.length - 1) to = tabs.length - 1;
+    if (to === from) return;
+    var current = tabs[active];
+    var moved = tabs.splice(from, 1)[0];
+    tabs.splice(to, 0, moved);
+    active = Math.max(0, tabs.indexOf(current));
+    render();
+    persistActive();
+  }
+
+  // Плашка — одно отдельное окно на весь перенос. Страница за своим краем её не нарисует,
+  // а вторая копия внутри страницы мигала и выглядела иначе.
+  var chipSerial = 0;
+  var chipToken = 0;
+
+  function themeIsDark() {
+    return document.documentElement.getAttribute('data-theme') !== 'light';
+  }
+
+  function showChip(tab) {
+    var serial = ++chipSerial;
+    chipToken = 0;
+    callApi('show_drag_ghost', tab.title || '', themeIsDark()).then(function (token) {
+      if (serial !== chipSerial) {
+        if (token) callApi('hide_drag_ghost', token);
+        return;
+      }
+      chipToken = token || 0;
+    }, function () {});
+  }
+
+  function hideChip() {
+    var token = chipToken;
+    chipSerial += 1;
+    chipToken = 0;
+    if (token) callApi('hide_drag_ghost', token);
+  }
+
+  function waitDetach(jobId) {
+    return new Promise(function (resolve) {
+      var tries = 0;
+      function poll() {
+        tries += 1;
+        callApi('detach_status', jobId).then(function (status) {
+          if (status === 'ready') resolve(true);
+          else if (status === 'error' || tries > 80) resolve(false);
+          else setTimeout(poll, 40);
+        }, function () { resolve(false); });
+      }
+      poll();
+    });
+  }
+
+  window.showTabDrop = function (index) {
+    placeDropMark(index);
+  };
+
+  window.clearTabDrop = function () {
+    hideDropMark();
+  };
+
+  window.tabDropInfo = function (clientX, clientY) {
+    if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+    if (clientX < 0 || clientY < 0 || clientX > window.innerWidth || clientY > window.innerHeight) return null;
+    var onBar = overOwnTabBar(clientX, clientY);
+    return { index: onBar ? rawInsertIndex(clientX) : tabs.length, onBar: onBar };
+  };
+
+  window.receiveTab = function (spec, index) {
+    var tab = makeTab(spec || {});
+    var existing = tabIndexByPath(tab.pathKey);
+    if (existing >= 0) {
+      tabs[existing] = tab;
+      if (existing === active) {
+        applyTab(tab);
+        render();
+        persistActive();
+      } else {
+        switchTo(existing);
+      }
+      return true;
+    }
+    if (pristineWelcomeOnly()) {
+      tabs[0] = tab;
+      active = 0;
+    } else {
+      if (active >= 0) snapshotActive();
+      if (!tab.path) tab.title = uniqueUntitled(tab.title);
+      var at = parseInt(index, 10);
+      if (isNaN(at) || at < 0) at = tabs.length;
+      if (at > tabs.length) at = tabs.length;
+      tabs.splice(at, 0, tab);
+      active = at;
+    }
+    applyTab(tab);
+    render();
+    persistActive();
+    return true;
+  };
+
+  function finishOutsideDrop(tab, screenX, screenY) {
+    if (detachBusy) return;
+    detachBusy = true;
+    var spec = exportTab(tab);
+    callApi('resolve_tab_drop', screenX, screenY).then(function (hit) {
+      if (hit && hit.windowId && hit.windowId !== window.__windowId) {
+        return callApi('deliver_tab', hit.windowId, spec, hit.index).then(function (ok) {
+          if (!ok) return false;
+          var from = tabs.indexOf(tab);
+          if (from < 0) return false;
+          return takeTabOut(from).then(function () { return true; });
+        });
+      }
+      return callApi('open_detached_window', spec, screenX, screenY).then(function (jobId) {
+        if (!jobId) return false;
+        return waitDetach(jobId).then(function (ready) {
+          if (!ready) return false;
+          var from = tabs.indexOf(tab);
+          if (from < 0) return false;
+          return takeTabOut(from).then(function () { return true; });
+        });
+      });
+    }).then(function (ok) {
+      detachBusy = false;
+      if (ok && !tabs.length) callApi('close_this_window');
+    }, function () {
+      detachBusy = false;
+    });
+  }
+
+  function startTabDrag(event, item, tab) {
+    if (detachBusy) return;
+    if (event.button !== 0) return;
+    if (event.target.closest && event.target.closest('.tab-close')) return;
+    var startX = event.clientX;
+    var startY = event.clientY;
+    var dragging = false;
+    var ended = false;
+    var last = { clientX: startX, clientY: startY, screenX: event.screenX, screenY: event.screenY };
+
+    function move(e) {
+      if (ended) return;
+      last = { clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY };
+      if (!dragging) {
+        if (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4) return;
+        dragging = true;
+        item.classList.add('dragging');
+        document.body.classList.add('tab-dragging');
+        showChip(tab);
+      }
+      var onBar = overOwnTabBar(e.clientX, e.clientY);
+      if (onBar) {
+        placeDropMark(rawInsertIndex(e.clientX));
+        if (foreignMark) {
+          foreignMark = false;
+          callApi('clear_foreign_drops');
+        }
+      } else {
+        hideDropMark();
+        scheduleForeignMark();
+      }
+    }
+
+    function end(e) {
+      if (ended) return;
+      ended = true;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      item.removeEventListener('lostpointercapture', lost);
+      if (!dragging) return;
+      suppressClick = true;
+      item.classList.remove('dragging');
+      hideDropMark();
+      hideChip();
+      callApi('clear_foreign_drops');
+      document.body.classList.remove('tab-dragging');
+      var point = e && typeof e.clientX === 'number' ? e : last;
+      var from = tabs.indexOf(tab);
+      if (from < 0) return;
+      if (overOwnTabBar(point.clientX, point.clientY)) {
+        reorderTab(from, rawInsertIndex(point.clientX));
+        return;
+      }
+      finishOutsideDrop(tab, point.screenX, point.screenY);
+    }
+
+    var foreignMark = false;
+    var foreignBusy = false;
+    var foreignAt = 0;
+
+    function scheduleForeignMark() {
+      var now = Date.now();
+      if (!dragging || foreignBusy || now - foreignAt < 80) return;
+      foreignAt = now;
+      foreignBusy = true;
+      foreignMark = true;
+      callApi('preview_foreign_drop').then(function () {
+        foreignBusy = false;
+      }, function () {
+        foreignBusy = false;
+      });
+    }
+
+    function lost(e) {
+      // Уход захвата на другое окно — не конец переноса: кнопку ещё держат.
+      if (!ended && e && e.pointerId != null) {
+        try { item.setPointerCapture(e.pointerId); } catch (error) {}
+      }
+    }
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    item.addEventListener('lostpointercapture', lost);
+    try {
+      item.setPointerCapture(event.pointerId);
+    } catch (error) {}
+  }
 
   function modalOpen() {
     return !!document.querySelector('.modal-overlay.open, .modal-popup.open');

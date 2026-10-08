@@ -1,12 +1,14 @@
 """Файловые операции: новый документ, открытие .md/.html, сохранение."""
 import os
 import threading
+import time
+import uuid
 
 import webview
 
 from . import APP_TITLE, UNTITLED, config, session
 from .htmlfile import inject_fit_width_style, prepare_html_for_preview, read_html_text
-from .state import alert, call_js, state
+from .state import alert, bind_slot, call_js, state, unbind_slot
 
 HTML_EXTS = ('.html', '.htm')
 # «All files» первым — по умолчанию видны все файлы (.md/.html не серые);
@@ -121,21 +123,51 @@ def remember_session(snapshot=None, from_js=False):
         snapshot = _capture_editor_session()
         if not _bundle_ok(snapshot):
             return
-    session.save_session(snapshot)
+    bundle = session.normalize_bundle(snapshot)
+    if bundle is None:
+        return
+    slot = state.active_slot()
+    if slot is None:
+        session.save_session(bundle)
+        return
+    slot.last_snapshot = bundle
+    publish_sessions()
+
+
+def publish_sessions():
+    """Одна сессия на все окна: при следующем запуске открывается одно окно."""
+    merged = session.merge_windows({
+        'windows': [
+            {'tabs': slot.last_snapshot['tabs'], 'active': slot.last_snapshot['active']}
+            for slot in state.iter_slots()
+            if session.bundle_restorable(slot.last_snapshot)
+        ],
+    })
+    if merged:
+        session.save_session(merged)
+    else:
+        session.clear_session()
+
+
+def forget_window_session():
+    """У этого окна больше нет вкладок, которые надо помнить."""
+    slot = state.active_slot()
+    if slot is not None:
+        slot.last_snapshot = None
+    state.persist_session = False
+    publish_sessions()
 
 
 def note_missing_session_file(data):
     """Сессия указывала на файлы, которых больше нет. Сообщить, если открывать нечего."""
-    tabs = data.get('tabs') if isinstance(data, dict) else None
-    if not isinstance(tabs, list):
-        return
     missing = []
-    for tab in tabs:
-        if not isinstance(tab, dict) or tab.get('dirty'):
-            continue
-        path = tab.get('path')
-        if isinstance(path, str) and path and not os.path.isfile(path):
-            missing.append(path)
+    for bundle in session.iter_windows(data):
+        for tab in bundle.get('tabs') or []:
+            if not isinstance(tab, dict) or tab.get('dirty'):
+                continue
+            path = tab.get('path')
+            if isinstance(path, str) and path and not os.path.isfile(path):
+                missing.append(path)
     if not missing or session.is_restorable(data):
         return
     session.clear_session()
@@ -149,7 +181,10 @@ def show_welcome():
     state.current_file = None
     state.opened_path = None
     state.html_mode = False
-    session.clear_session()
+    slot = state.active_slot()
+    if slot is not None:
+        slot.last_snapshot = None
+    publish_sessions()
     _show_document_name(UNTITLED)
     call_js('beginWelcomeDocument', state.session_epoch)
 
@@ -171,7 +206,10 @@ def bind_active(info):
     state.current_file = None if html else path
     state.persist_session = bool(info.get('persist'))
     if not state.persist_session:
-        session.clear_session()
+        slot = state.active_slot()
+        if slot is not None:
+            slot.last_snapshot = None
+        publish_sessions()
     title = info.get('title')
     if not isinstance(title, str) or not title.strip():
         title = os.path.basename(path) if path else UNTITLED
@@ -323,7 +361,7 @@ def _materialize_tab(tab):
 
 
 def _restore_session(data):
-    if not session.is_restorable(data):
+    if not session.bundle_restorable(data):
         return False
     prepared = []
     missing = []
@@ -470,8 +508,130 @@ def _write_editor_content_unlocked(path):
     return True
 
 
-_close_lock = threading.Lock()
-_close_started = False
+def install_launch_tabs(payload):
+    """Открыть вкладки, которые перенесли в новое окно. Они уже прочитаны."""
+    tabs = payload.get('tabs') if isinstance(payload, dict) else None
+    if not isinstance(tabs, list) or not tabs:
+        show_welcome()
+        return
+    try:
+        active = int(payload.get('active') or 0)
+    except (TypeError, ValueError):
+        active = 0
+    if active < 0 or active >= len(tabs):
+        active = 0
+    _suspend_session()
+    try:
+        call_js('installTabs', {'tabs': tabs, 'active': active})
+        current = tabs[active] if isinstance(tabs[active], dict) else {}
+        html = bool(current.get('html'))
+        path = current.get('path')
+        if not isinstance(path, str) or not path:
+            path = None
+        state.html_mode = html
+        state.opened_path = path
+        state.current_file = None if html else path
+        state.persist_session = True
+        _show_document_name(current.get('title') or UNTITLED)
+    finally:
+        _resume_session(True)
+
+
+def _bundle_from_drag_spec(spec):
+    """Снимок перетащенной вкладки, чтобы она не пропала, если окно ещё не открылось."""
+    if not isinstance(spec, dict):
+        return None
+    path = spec.get('path')
+    if not isinstance(path, str) or not path:
+        path = None
+    tab = {
+        'html': bool(spec.get('html')),
+        'path': path,
+        'title': spec.get('title') or UNTITLED,
+        'welcome': bool(spec.get('welcome')) and not path and not spec.get('dirty'),
+        'dirty': bool(spec.get('dirty')) and not spec.get('html'),
+        'anchor': spec.get('anchor') or 0,
+        'head': spec.get('head') or 0,
+        'scroll': spec.get('scroll') or 0,
+        'previewScroll': spec.get('previewScroll') or 0,
+    }
+    if tab['dirty']:
+        text = spec.get('text')
+        if not isinstance(text, str):
+            text = ''
+        tab['draft'] = text
+    return session.normalize_bundle({'tabs': [tab], 'active': 0})
+
+
+def deliver_tab(window_id, spec, index):
+    """Вставить вкладку в уже открытое окно."""
+    slot = state.slots.get(str(window_id))
+    if slot is None or slot.window is None or not isinstance(spec, dict):
+        return False
+    try:
+        at = int(index)
+    except (TypeError, ValueError):
+        at = 0
+    token = bind_slot(slot)
+    try:
+        call_js('receiveTab', spec, at)
+    except Exception:
+        return False
+    finally:
+        unbind_slot(token)
+    return True
+
+
+_detach_jobs = {}
+
+
+def open_detached_window(spec, screen_x, screen_y):
+    """Поставить новое окно в очередь и сразу вернуть номер задачи.
+
+    Само окно создаётся следом, уже после ответа странице. Иначе Show() ждёт
+    поток интерфейса, который в этот момент занят ответом, и окно зависает.
+    Вкладку из старого окна страница забирает только когда статус станет ready.
+    """
+    if not isinstance(spec, dict):
+        return False
+    try:
+        x = int(float(screen_x)) - 180
+        y = int(float(screen_y)) - 36
+    except (TypeError, ValueError):
+        x, y = None, None
+    job_id = uuid.uuid4().hex
+    job = {'status': 'pending'}
+    _detach_jobs[job_id] = job
+
+    def run():
+        time.sleep(0.05)
+        try:
+            from .windows import create_editor_window
+            slot = create_editor_window(
+                launch={'kind': 'tabs', 'tabs': [spec], 'active': 0},
+                x=x,
+                y=y,
+            )
+            bundle = _bundle_from_drag_spec(spec)
+            if bundle is not None:
+                slot.last_snapshot = bundle
+                publish_sessions()
+            job['status'] = 'ready'
+        except Exception:
+            job['status'] = 'error'
+
+    threading.Thread(target=run, daemon=True).start()
+    return job_id
+
+
+def detach_status(job_id):
+    job = _detach_jobs.get(str(job_id or ''))
+    if job is None:
+        return 'error'
+    status = job['status']
+    if status != 'pending':
+        _detach_jobs.pop(str(job_id), None)
+    return status
 
 
 def flush_session_now():
@@ -490,27 +650,29 @@ def request_close(*_args, **_kwargs):
     evaluate_js прямо из обработчика closing на Windows ждёт тот же поток интерфейса
     и окно зависает. Поэтому закрытие откладывается: сначала сессия, потом destroy.
     """
-    global _close_started
-    if state.force_close:
+    slot = state.active_slot()
+    if slot is None:
         return True
-    with _close_lock:
-        if _close_started:
-            return False
-        _close_started = True
-    threading.Thread(target=_close_after_flush, daemon=True).start()
+    if slot.force_close:
+        return True
+    if slot.close_started:
+        return False
+    slot.close_started = True
+    from .state import spawn
+    spawn(slot, _close_after_flush, slot)
     return False
 
 
-def _close_after_flush():
-    global _close_started
+def _close_after_flush(slot):
     try:
         flush_session_now()
     except Exception:
         pass
-    state.force_close = True
+    if slot is None or slot.window is None:
+        return
+    slot.force_close = True
     try:
-        state.window.destroy()
+        slot.window.destroy()
     except Exception:
-        state.force_close = False
-        with _close_lock:
-            _close_started = False
+        slot.force_close = False
+        slot.close_started = False

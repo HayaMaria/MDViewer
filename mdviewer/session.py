@@ -92,8 +92,8 @@ def _active_index(value, count):
     return number
 
 
-def normalize(raw):
-    """Пачка вкладок. None — это не сессия.
+def normalize_bundle(raw):
+    """Вкладки одного окна. None — это не пачка вкладок.
 
     Прежний формат (один документ без поля tabs) читается как одна вкладка.
     """
@@ -112,6 +112,69 @@ def normalize(raw):
     if not tabs:
         return None
     return {'tabs': tabs, 'active': _active_index(raw.get('active'), len(tabs))}
+
+
+def normalize(raw):
+    """Сессия: одно или несколько окон. None — файл не про сессию.
+
+    Старый файл без поля windows — это одно окно.
+    """
+    if not isinstance(raw, dict):
+        return None
+    if isinstance(raw.get('windows'), list):
+        windows = []
+        for item in raw['windows']:
+            bundle = normalize_bundle(item)
+            if bundle is not None:
+                windows.append(bundle)
+        if not windows:
+            return None
+        return {'windows': windows}
+    bundle = normalize_bundle(raw)
+    if bundle is None:
+        return None
+    return {'windows': [bundle]}
+
+
+def iter_windows(data):
+    """Список пачек вкладок. Пусто, если это не сессия."""
+    if not isinstance(data, dict):
+        return []
+    windows = data.get('windows')
+    if isinstance(windows, list):
+        return [item for item in windows if isinstance(item, dict) and item.get('tabs')]
+    if data.get('tabs'):
+        return [data]
+    return []
+
+
+def merge_windows(data):
+    """Все окна сессии — одна пачка вкладок. При запуске открывается одно окно."""
+    bundles = iter_windows(data)
+    tabs = []
+    seen = set()
+    for bundle in bundles:
+        for tab in bundle.get('tabs') or []:
+            if not isinstance(tab, dict):
+                continue
+            path = tab.get('path')
+            key = os.path.normcase(path) if isinstance(path, str) and path else None
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            tabs.append(tab)
+    if not tabs:
+        return None
+    active = 0
+    if bundles:
+        try:
+            active = int(bundles[0].get('active') or 0)
+        except (TypeError, ValueError):
+            active = 0
+    if active < 0 or active >= len(tabs):
+        active = 0
+    return {'tabs': tabs, 'active': active}
 
 
 def is_pristine_welcome(tab):
@@ -142,14 +205,19 @@ def tab_restorable(tab):
     return True
 
 
-def is_restorable(data):
-    """Есть ли что открывать, кроме нетронутого приветствия."""
-    if not data or not data.get('tabs'):
+def bundle_restorable(data):
+    """Есть ли в одном окне что открывать, кроме нетронутого приветствия."""
+    if not isinstance(data, dict) or not data.get('tabs'):
         return False
     return any(
         tab_restorable(tab) and not is_pristine_welcome(tab)
         for tab in data['tabs']
     )
+
+
+def is_restorable(data):
+    """Есть ли что открывать хотя бы в одном окне."""
+    return any(bundle_restorable(bundle) for bundle in iter_windows(data))
 
 
 def load_session(path=None):
