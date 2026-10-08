@@ -78,14 +78,14 @@
     <div class="toolbar-sep"></div>
     <!-- Отменить / повторить -->
     <div class="menu-group">
-      <button class="menu-btn" title="Отменить (Ctrl+Z)" data-action="js:undoEditor">
+      <button class="menu-btn" id="undo-btn" title="Отменить (Ctrl+Z)" data-action="js:undoEditor" disabled>
         <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
           <path d="M4 10l4-4v3c4 0 6 2 7 5l-2-1c-1-1.7-2.5-2.5-5-2.5v3l-4-3.5z" />
         </svg>
       </button>
     </div>
     <div class="menu-group">
-      <button class="menu-btn" title="Повторить (Ctrl+Y)" data-action="js:redoEditor">
+      <button class="menu-btn" id="redo-btn" title="Повторить (Ctrl+Y)" data-action="js:redoEditor" disabled>
         <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
           <path d="M16 10l-4-4v3c-4 0-6 2-7 5l2-1c1-1.7 2.5-2.5 5-2.5v3l4-3.5z" />
         </svg>

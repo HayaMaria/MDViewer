@@ -241,6 +241,16 @@ body {
   background: var(--toolbar-btn-active);
 }
 
+.menu-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.menu-btn:disabled:hover,
+.menu-btn:disabled:active {
+  background: none;
+}
+
 /* Включённое состояние кнопок-переключателей тулбара (синхронная прокрутка) */
 .menu-btn.toggled-on {
   color: var(--accent);
