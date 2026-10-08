@@ -1,6 +1,7 @@
 // ===== Диалоги «Настройки» и «Экспортировать HTML как...» =====
 (function () {
   var DEFAULT_FONT_SIZE = 15;
+  var COLUMN_WIDTHS = ['reading', 'wide', 'full'];
   var savedFontSize = DEFAULT_FONT_SIZE;
   var SIZE_SELECTS = {
     image: 'settings-size-image',
@@ -25,6 +26,12 @@
       if (path) document.getElementById(inputId).value = path;
     });
   }
+
+  window.applyColumnWidth = function (value) {
+    var mode = COLUMN_WIDTHS.indexOf(value) >= 0 ? value : 'reading';
+    var preview = document.getElementById('preview');
+    if (preview) preview.setAttribute('data-column', mode);
+  };
 
   function showFontSize(size) {
     document.getElementById('settings-font-size-value').textContent = size + 'px';
@@ -89,6 +96,7 @@
       document.getElementById('settings-autosave-enabled').checked = !!autosave.enabled;
       fillAutosaveIntervals(s.autosave_intervals, autosave.interval);
       syncAutosaveIntervalState();
+      setRadio('settings-column', COLUMN_WIDTHS.indexOf(s.column_width) >= 0 ? s.column_width : 'reading');
       openModal('settings-overlay');
     });
   };
@@ -114,8 +122,10 @@
       },
       md_save_dir: document.getElementById('settings-md-path').value,
       media_sizes: mediaSizes,
+      column_width: getRadio('settings-column') || 'reading',
       autosave: autosave,
     }).then(function () {
+      window.applyColumnWidth(getRadio('settings-column') || 'reading');
       window.applyMediaSizeDefaults(mediaSizes);
       window.applyAutosaveSettings(autosave);
       closeModal('settings-overlay');

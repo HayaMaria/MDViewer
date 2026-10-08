@@ -180,7 +180,7 @@
   <div class="container">
     <div class="panel" id="editor"></div>
     <div class="splitter" id="splitter"></div>
-    <div class="panel" id="preview"></div>
+    <div class="panel" id="preview" data-column="reading"></div>
   </div>
 
   <!-- ===== Строка состояния ===== -->
@@ -277,6 +277,12 @@
             <input type="range" id="settings-font-size" min="10" max="30" step="1">
             <span id="settings-font-size-value">15px</span>
           </div>
+        </div>
+        <div class="radio-list">
+          <label class="field-label">Ширина колонки</label>
+          <label><input type="radio" name="settings-column" value="reading" checked> Для чтения</label>
+          <label><input type="radio" name="settings-column" value="wide"> Шире</label>
+          <label><input type="radio" name="settings-column" value="full"> На всю ширину</label>
         </div>
         <div>
           <label class="field-label">Размер по умолчанию</label>

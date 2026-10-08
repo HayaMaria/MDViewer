@@ -8,6 +8,7 @@ onApiReady(function () {
     if (s.media_size_options && s.media_size_options.length) {
       window.MEDIA_SIZE_OPTIONS = s.media_size_options;
     }
+    window.applyColumnWidth(s.column_width);
     window.applyMediaSizeDefaults(s.media_sizes);
     window.applyAutosaveSettings(s.autosave);
   });

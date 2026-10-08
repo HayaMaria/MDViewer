@@ -37,6 +37,9 @@ AUTOSAVE_INTERVALS = (
     (600, '10 минут'),
 )
 AUTOSAVE_DEFAULT_INTERVAL = 30
+# Ширина колонки просмотра и экспорта. Редактор этой мерой не ограничен.
+COLUMN_WIDTHS = ('reading', 'wide', 'full')
+COLUMN_WIDTH_DEFAULT = 'reading'
 
 
 def load_config():
@@ -101,6 +104,13 @@ def _clamp_autosave_interval(value):
     return seconds if seconds in allowed else AUTOSAVE_DEFAULT_INTERVAL
 
 
+def column_width(config=None):
+    """reading — около 72 знаков, wide — около 100, full — на всю ширину."""
+    config = load_config() if config is None else config
+    value = config.get('columnWidth', COLUMN_WIDTH_DEFAULT)
+    return value if value in COLUMN_WIDTHS else COLUMN_WIDTH_DEFAULT
+
+
 def autosave_settings(config=None):
     """Включено ли автосохранение и как часто, в секундах."""
     config = load_config() if config is None else config
@@ -124,6 +134,7 @@ def ui_settings():
         'downloads_dir': downloads_dir(),
         'media_sizes': media_size_defaults(config),
         'media_size_options': list(MEDIA_SIZE_OPTIONS),
+        'column_width': column_width(config),
         'autosave': autosave_settings(config),
         'autosave_intervals': [
             {'value': seconds, 'label': label} for seconds, label in AUTOSAVE_INTERVALS
@@ -142,6 +153,7 @@ def save_ui_settings(settings):
         key: _clamp_media_size(incoming.get(key), default)
         for key, default in MEDIA_SIZE_DEFAULTS.items()
     }
+    config['columnWidth'] = column_width({'columnWidth': settings.get('column_width')})
     incoming_autosave = settings.get('autosave') or {}
     config['autosave'] = {
         'enabled': bool(incoming_autosave.get('enabled', False)),

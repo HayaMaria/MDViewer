@@ -263,6 +263,12 @@ function schedulePreviewUpdate() {
   }, PREVIEW_DEBOUNCE_MS);
 }
 
+// Блоки документа лежат в .mdv-column. Якорь прокрутки смотрит на них, не на обёртку.
+function previewBlocks(previewEl) {
+  const column = previewEl.querySelector(":scope > .mdv-column");
+  return Array.from((column || previewEl).children);
+}
+
 // Функция обновления превью
 // force=true — пропустить проверку «текст не менялся» (нужно после выхода из
 // режима просмотра HTML, когда DOM превью был очищен извне)
@@ -291,7 +297,7 @@ function updatePreview(force) {
   let anchorIndex = 0;
   let anchorOffset = 0;
   const panelTop = previewEl.getBoundingClientRect().top;
-  const oldKids = Array.from(previewEl.children);
+  const oldKids = previewBlocks(previewEl);
   for (let i = 0; i < oldKids.length; i++) {
     if (oldKids[i].getBoundingClientRect().top <= panelTop) anchorIndex = i;
     else break;
@@ -300,11 +306,11 @@ function updatePreview(force) {
     anchorOffset = oldKids[anchorIndex].getBoundingClientRect().top - panelTop;
   }
 
-  previewEl.innerHTML = html;
+  previewEl.innerHTML = '<div class="mdv-column">' + html + '</div>';
 
   // Промежуточное восстановление (диаграммы ещё не отрендерены): держим
   // якорный блок у кромки, чтобы не мигало и не улетало к верху
-  const kidsMid = Array.from(previewEl.children);
+  const kidsMid = previewBlocks(previewEl);
   if (kidsMid.length && anchorIndex < kidsMid.length) {
     const contentTop = kidsMid[anchorIndex].getBoundingClientRect().top
       - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
@@ -389,7 +395,7 @@ function updatePreview(force) {
   mermaidDone.then(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (settleId !== syncScrollSettle.id) return;
-      const kids = Array.from(previewEl.children);
+      const kids = previewBlocks(previewEl);
       if (kids.length && anchorIndex < kids.length) {
         const contentTop = kids[anchorIndex].getBoundingClientRect().top
           - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
@@ -585,6 +591,9 @@ window.setEditorReadOnly = function (readOnly) {
 // Текст появляется после старта моста pywebview: файл из Проводника или приветствие (main.js)
 const editorExtensions = [
   basicSetup,
+  // Настоящий перенос: курсор, клик и выделение идут по видимым рядам.
+  // В документ разрыв не записывается.
+  EditorView.lineWrapping,
   markdown(),
   oneDark,
   keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),

@@ -87,8 +87,8 @@ body {
   min-width: 0;
   padding: 24px 16px;
   line-height: 1.6;
-  word-break: break-all;
   overflow-wrap: anywhere;
+  word-break: normal;
   overflow-x: auto;
 }
 
@@ -134,17 +134,10 @@ body {
 }
 #editor .cm-content {
   box-sizing: border-box !important;
-  white-space: pre-wrap !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-all !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
   padding-right: 32px !important;
-}
-#editor .cm-line {
-  max-width: 100% !important;
-  min-width: 0 !important;
-  white-space: pre-wrap !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-all !important;
 }
 #editor .cm-scroller {
   height: 100% !important;
