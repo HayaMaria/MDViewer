@@ -157,7 +157,7 @@
       close.className = 'tab-close';
       close.title = 'Закрыть';
       close.setAttribute('aria-label', 'Закрыть ' + tab.title);
-      close.textContent = '×';
+      close.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M1.1 1.1L8.9 8.9M8.9 1.1L1.1 8.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
       close.addEventListener('click', function (event) {
         event.stopPropagation();
         closeTab(index);
@@ -599,11 +599,4 @@
       switchTo(next);
     }
   }, true);
-
-  var addButton = document.getElementById('tab-new');
-  if (addButton) {
-    addButton.addEventListener('click', function () {
-      callApi('new_document');
-    });
-  }
 })();
