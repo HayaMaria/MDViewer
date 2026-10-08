@@ -17,38 +17,70 @@ from mdviewer.win.associate import get_startup_file_path, register_file_associat
 _accelerator_handlers = []
 
 
+def _webview_controller(control):
+    # У WinForms WebView2 нет публичного CoreWebView2Controller (SDK 1.0.3856).
+    # Контроллер хранится в приватном поле и нужен для AcceleratorKeyPressed.
+    from System.Reflection import BindingFlags
+
+    field = control.GetType().GetField(
+        '_coreWebView2Controller',
+        BindingFlags.Instance | BindingFlags.NonPublic,
+    )
+    if field is None:
+        return None
+    return field.GetValue(control)
+
+
 def _keep_ctrl_u_for_editor():
     # debug=True включает браузерные сочетания WebView, и Ctrl+U открывает исходный код
     # страницы, не доходя до редактора. Отменяем только это сочетание и вызываем подчёркивание.
+    # loaded срабатывает не в UI-потоке, а контроллер WebView2 можно трогать только оттуда.
     if _accelerator_handlers:
         return
     native = getattr(state.window, 'native', None)
     control = getattr(native, 'webview', None) if native else None
     if control is None:
         return
+
+    def attach():
+        try:
+            controller = _webview_controller(control)
+            from System.Windows.Forms import Control, Keys
+        except Exception:
+            logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller', exc_info=True)
+            return
+        if controller is None:
+            logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller')
+            return
+
+        def on_accelerator(sender, args):
+            try:
+                if int(args.KeyEventKind) != 0 or int(args.VirtualKey) != 0x55:
+                    return
+                mods = int(Control.ModifierKeys)
+                if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)) or (mods & int(Keys.Shift)):
+                    return
+                args.Handled = True
+                control.CoreWebView2.ExecuteScriptAsync(
+                    'if(!window.__htmlMode&&window.toggleUnderline)window.toggleUnderline()'
+                )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    'Ctrl+U: не удалось вставить подчёркивание', exc_info=True
+                )
+
+        _accelerator_handlers.append(on_accelerator)
+        controller.AcceleratorKeyPressed += on_accelerator
+
     try:
-        controller = control.CoreWebView2Controller
-        from System.Windows.Forms import Control, Keys
+        from System import Action
+
+        if control.InvokeRequired:
+            control.Invoke(Action(attach))
+        else:
+            attach()
     except Exception:
         logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller', exc_info=True)
-        return
-
-    def on_accelerator(sender, args):
-        try:
-            if int(args.KeyEventKind) != 0 or int(args.VirtualKey) != 0x55:
-                return
-            mods = int(Control.ModifierKeys)
-            if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)) or (mods & int(Keys.Shift)):
-                return
-            args.Handled = True
-            control.CoreWebView2.ExecuteScriptAsync(
-                'if(!window.__htmlMode&&window.toggleUnderline)window.toggleUnderline()'
-            )
-        except Exception:
-            logging.getLogger(__name__).warning('Ctrl+U: не удалось вставить подчёркивание', exc_info=True)
-
-    _accelerator_handlers.append(on_accelerator)
-    controller.AcceleratorKeyPressed += on_accelerator
 
 
 def silence_http_server_logs():
