@@ -53,6 +53,24 @@
   color: var(--heading);
 }
 
+/* Мера строки для чтения. data-column на #preview переключает ширину.
+   Картинки и диаграммы с шириной в px шире колонки не сжимаются. */
+#preview {
+  --mdv-column: 72ch;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+#preview[data-column="wide"] {
+  --mdv-column: 100ch;
+}
+#preview[data-column="full"] {
+  --mdv-column: none;
+}
+#preview .mdv-column {
+  max-width: var(--mdv-column);
+  min-width: 0;
+}
+
 #preview p {
   margin: 8px 0;
 }
@@ -69,8 +87,8 @@
   border-radius: 4px;
   font-family: "Consolas", "Courier New", monospace;
   font-size: 0.9em;
-  word-break: break-all;
   overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 #preview pre {
@@ -79,8 +97,8 @@
   border-radius: 6px;
   margin: 12px 0;
   white-space: pre-wrap;
-  word-break: break-all;
   overflow-wrap: anywhere;
+  word-break: normal;
   max-width: 100%;
 }
 
@@ -103,7 +121,8 @@
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 #preview th,
@@ -111,7 +130,8 @@
   border: 1px solid var(--table-border);
   padding: 8px 12px;
   text-align: left;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 #preview th {

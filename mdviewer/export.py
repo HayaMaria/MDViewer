@@ -32,7 +32,7 @@ def export_html(mode='full', theme='current', save_path=''):
         theme = call_js('getCurrentTheme') or 'dark'
     body_html = call_js('getRenderedBodyHTMLExport')
     try:
-        html = build_html(body_html, theme, mode)
+        html = build_html(body_html, theme, mode, config.column_width())
     except FileNotFoundError as e:
         alert(f'Ошибка экспорта: не найден файл {e.filename}')
         return
@@ -57,10 +57,12 @@ def _choose_target_path(save_dir):
     return result[0] if result else None
 
 
-def build_html(body_html, theme, mode):
+def build_html(body_html, theme, mode, column='reading'):
     has_mermaid = 'class="mermaid"' in body_html
     has_charts = 'data-chart-code="' in body_html
     has_nomnoml = 'data-nomnoml-code="' in body_html
+    if column not in ('reading', 'wide', 'full'):
+        column = 'reading'
     styles = _read(CSS_DIR / 'preview.css') + _read(CSS_DIR / 'export.css')
 
     parts = [
@@ -80,7 +82,10 @@ def build_html(body_html, theme, mode):
     if has_nomnoml:
         parts.append(_library_script('graphre.js', GRAPHRE_CDN, mode))
         parts.append(_library_script('nomnoml.min.js', NOMNOML_CDN, mode))
-    parts += ['</head>', '<body>', f'<div id="preview">{body_html}</div>']
+    parts += [
+        '</head>', '<body>',
+        f'<div id="preview" data-column="{column}"><div class="mdv-column">{body_html}</div></div>',
+    ]
 
     if has_mermaid:
         with open(MERMAID_THEMES, 'r', encoding='utf-8') as f:
