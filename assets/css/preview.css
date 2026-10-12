@@ -1,6 +1,7 @@
 /* Тема и оформление содержимого превью. Подключается в приложении и встраивается в экспортированный HTML. */
 
 :root {
+  color-scheme: dark;
   --bg: #1e1e1e;
   --fg: #d4d4d4;
   --border: #333;
@@ -17,6 +18,7 @@
 
 /* ===== Светлая тема ===== */
 [data-theme="light"] {
+  color-scheme: light;
   --bg: #ffffff;
   --fg: #1e1e1e;
   --border: #ddd;

@@ -71,13 +71,27 @@ def _try_set_attribute(hwnd, attribute, color_int):
 
 def _resolve_hwnd(window):
     """Извлечь HWND из объекта окна pywebview. Возвращает HWND как int или None."""
-    # Способ 1: window.native — для Edge Chromium это HWND (int)
+    # Способ 1: HWND напрямую или Handle формы WinForms.
+    # Форму можно читать из потока интерфейса (до Show). С другого потока
+    # доступ к Handle бросает исключение — тогда ищем окно по заголовку.
     if hasattr(window, 'native') and window.native is not None:
         native = window.native
         if isinstance(native, int):
-            return native
+            return native or None
+        handle = getattr(native, 'Handle', None)
+        if handle is not None:
+            try:
+                to_int64 = getattr(handle, 'ToInt64', None)
+                if callable(to_int64):
+                    hwnd = int(to_int64())
+                    if hwnd:
+                        return hwnd
+            except Exception:
+                pass
         try:
-            return int(native)
+            hwnd = int(native)
+            if hwnd:
+                return hwnd
         except (TypeError, ValueError):
             pass
 

@@ -5,6 +5,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MD Viewer</title>
+  <script>
+    // До таблиц стилей: иначе новое окно на миг открывается тёмным.
+    (function () {
+      var theme = 'dark';
+      var match = /[?&]theme=(light|dark)(?:&|$)/.exec(location.search);
+      if (match) theme = match[1];
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <link rel="stylesheet" href="css/preview.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
