@@ -1,6 +1,6 @@
 // ===== Тема (светлая/тёмная) =====
 (function () {
-  var isDark = true;
+  var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   window.getCurrentTheme = function () {
     return isDark ? 'dark' : 'light';
