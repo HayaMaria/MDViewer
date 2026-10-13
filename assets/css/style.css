@@ -1143,3 +1143,37 @@ body.splitter-drag iframe {
   width: 100px;
   flex-shrink: 0;
 }
+
+/* Рамка, пока файл из Проводника ещё не отпущен. Мышь не перехватывает:
+   событие drop должно дойти до страницы, а не до этой плашки. */
+#file-drop {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  inset: 12px;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: rgba(30, 30, 30, 0.78);
+  color: #fff;
+  font-size: 16px;
+  user-select: none;
+}
+
+[data-theme="light"] #file-drop {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--fg);
+}
+
+body.file-drop #file-drop {
+  display: flex;
+}
+
+/* Иначе бросок на превью HTML остаётся внутри iframe и окно его не видит. */
+body.file-drop iframe {
+  pointer-events: none;
+}

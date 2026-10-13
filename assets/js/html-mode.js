@@ -3,6 +3,36 @@
 // редактор, разделитель и панель форматирования при этом скрыты.
 window.__htmlMode = false;
 
+// В srcdoc родитель не видит drag. Скрипт только шлёт postMessage,
+// чтобы окно показало рамку и забрало мышь у iframe.
+function previewFrameFileDrop() {
+  function isFiles(e) {
+    var types = e.dataTransfer && e.dataTransfer.types;
+    if (!types) return false;
+    for (var i = 0; i < types.length; i++) {
+      if (types[i] === 'Files') return true;
+    }
+    return false;
+  }
+  function tell(phase) {
+    try {
+      parent.postMessage({ source: 'mdv-file-drop', phase: phase }, '*');
+    } catch (err) {}
+  }
+  window.addEventListener('dragenter', function (e) {
+    if (isFiles(e)) tell('enter');
+  }, true);
+  window.addEventListener('dragover', function (e) {
+    if (isFiles(e)) tell('over');
+  }, true);
+  window.addEventListener('dragleave', function (e) {
+    if (!e.relatedTarget) tell('leave');
+  }, true);
+  window.addEventListener('drop', function (e) {
+    if (isFiles(e)) tell('leave');
+  }, true);
+}
+
 // Вызывается из Python (documents._open_html)
 window.loadHtmlPreview = function (html, name) {
   window.__htmlMode = true;
@@ -19,9 +49,10 @@ window.loadHtmlPreview = function (html, name) {
   frame.className = 'html-view-frame';
   frame.setAttribute('title', name || 'HTML');
   // Без allow-same-origin: скрипты файла работают, но iframe получает
-  // непрозрачный origin и не имеет доступа к родителю и pywebview API
+  // непрозрачный origin и не имеет доступа к родителю и pywebview API.
+  // postMessage родителю при этом разрешён — так превью сообщает о броске файла.
   frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
-  frame.srcdoc = html;
+  frame.srcdoc = '<script>(' + previewFrameFileDrop + ')();<\/script>' + html;
   previewEl.appendChild(frame);
 
   window.setFileName(name || 'document.html');
