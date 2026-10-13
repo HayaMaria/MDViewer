@@ -65,8 +65,7 @@
 ```python
 код
 ``` — блок кода с подсветкой
-  Язык можно указать любой: python, javascript,
-  html, css, bash, sql, json и т.д.
+  Язык: python, javascript, html, css, bash, sql или json.
 
 -- Разделитель --
 --- — горизонтальная черта во всю ширину

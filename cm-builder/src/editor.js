@@ -9,6 +9,8 @@ import { marked } from "marked";
 import mermaid from "mermaid";
 import { Chart, registerables } from "chart.js";
 import { applyChartTheme, renderChart } from "./charts.js";
+import { highlightCodeBlock } from "./highlight.js";
+import { editorCodeLanguage } from "./code-languages.js";
 import mermaidThemes from "../../assets/mermaid-themes.json";
 
 // Mermaid в превью всегда рисуется светлой палитрой; в тёмной теме его инвертирует CSS.
@@ -266,6 +268,14 @@ function bindTaskToggles(previewEl, content) {
   });
 }
 
+function renderCodeBlock({ text, lang }) {
+  const info = parseFenceInfo(lang);
+  if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
+  if (info.type === "chart") return chartBlock(text, info.width);
+  if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
+  return highlightCodeBlock(text, info.type);
+}
+
 const renderer = {
   link({ href, title, text }) {
     const openInApp = href.endsWith("+");
@@ -276,14 +286,7 @@ const renderer = {
     }
     return `<span class="external-link" data-url="${cleanHref}"${titleAttr}>${text} ↗</span>`;
   },
-  code({ text, lang }) {
-    const info = parseFenceInfo(lang);
-    if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
-    if (info.type === "chart") return chartBlock(text, info.width);
-    if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
-    // Для остальных блоков — пусть marked обрабатывает стандартно (возвращаем null/false)
-    return false;
-  },
+  code: renderCodeBlock,
   checkbox: taskBox,
 };
 marked.use({ renderer });
@@ -679,7 +682,7 @@ const editorExtensions = [
   // Настоящий перенос: курсор, клик и выделение идут по видимым рядам.
   // В документ разрыв не записывается.
   EditorView.lineWrapping,
-  markdown(),
+  markdown({ codeLanguages: editorCodeLanguage }),
   oneDark,
   keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
   searchHighlightExt,
@@ -1654,13 +1657,7 @@ exportRenderer.link = function ({ href, title, text }) {
   const titleAttr = title ? ` title="${title}"` : "";
   return `<a href="${cleanHref}"${titleAttr} target="_blank">${text}</a>`;
 };
-exportRenderer.code = function ({ text, lang }) {
-  const info = parseFenceInfo(lang);
-  if (info.type === "mermaid") return mermaidBlock(text, info.width, info.isUml ? "uml" : "mermaid");
-  if (info.type === "chart") return chartBlock(text, info.width);
-  if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
-  return false;
-};
+exportRenderer.code = renderCodeBlock;
 exportRenderer.checkbox = taskBox;
 
 window.getRenderedBodyHTMLExport = () =>

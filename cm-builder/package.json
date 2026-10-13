@@ -8,10 +8,18 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.0.1",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.0.1",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/legacy-modes": "^6.5.5",
     "@codemirror/theme-one-dark": "^6.0.1",
     "chart.js": "^4.5.1",
     "codemirror": "^6.0.1",
+    "highlight.js": "^11.12.0",
     "marked": "^18.0.11",
     "mermaid": "^11.0.0"
   },
