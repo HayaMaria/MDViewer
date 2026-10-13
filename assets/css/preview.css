@@ -14,6 +14,14 @@
   --hr-border: #333;
   --link-color: #4c9aff;
   --strong-color: #e1e1e1;
+  --hl-keyword: #ff7b72;
+  --hl-title: #d2a8ff;
+  --hl-number: #79c0ff;
+  --hl-string: #a5d6ff;
+  --hl-builtin: #ffa657;
+  --hl-comment: #8b949e;
+  --hl-tag: #7ee787;
+  --hl-bullet: #f2cc60;
 }
 
 /* ===== Светлая тема ===== */
@@ -31,6 +39,14 @@
   --hr-border: #e0e0e0;
   --link-color: #1a73e8;
   --strong-color: #1a1a1a;
+  --hl-keyword: #d73a49;
+  --hl-title: #6f42c1;
+  --hl-number: #005cc5;
+  --hl-string: #032f62;
+  --hl-builtin: #e36209;
+  --hl-comment: #6a737d;
+  --hl-tag: #22863a;
+  --hl-bullet: #735c0f;
 }
 
 #preview h1 {
@@ -143,6 +159,76 @@
   background: none;
   padding: 0;
   border-radius: 0;
+}
+
+#preview .hljs-doctag,
+#preview .hljs-keyword,
+#preview .hljs-meta .hljs-keyword,
+#preview .hljs-template-tag,
+#preview .hljs-template-variable,
+#preview .hljs-type,
+#preview .hljs-variable.language_ {
+  color: var(--hl-keyword);
+}
+
+#preview .hljs-title,
+#preview .hljs-title.class_,
+#preview .hljs-title.class_.inherited__,
+#preview .hljs-title.function_ {
+  color: var(--hl-title);
+}
+
+#preview .hljs-attr,
+#preview .hljs-attribute,
+#preview .hljs-literal,
+#preview .hljs-meta,
+#preview .hljs-number,
+#preview .hljs-operator,
+#preview .hljs-selector-attr,
+#preview .hljs-selector-class,
+#preview .hljs-selector-id,
+#preview .hljs-variable {
+  color: var(--hl-number);
+}
+
+#preview .hljs-regexp,
+#preview .hljs-string {
+  color: var(--hl-string);
+}
+
+#preview .hljs-built_in,
+#preview .hljs-symbol {
+  color: var(--hl-builtin);
+}
+
+#preview .hljs-code,
+#preview .hljs-comment,
+#preview .hljs-formula {
+  color: var(--hl-comment);
+}
+
+#preview .hljs-name,
+#preview .hljs-quote,
+#preview .hljs-selector-pseudo,
+#preview .hljs-selector-tag {
+  color: var(--hl-tag);
+}
+
+#preview .hljs-bullet {
+  color: var(--hl-bullet);
+}
+
+#preview .hljs-section {
+  color: var(--hl-number);
+  font-weight: 700;
+}
+
+#preview .hljs-emphasis {
+  font-style: italic;
+}
+
+#preview .hljs-strong {
+  font-weight: 700;
 }
 
 #preview blockquote {
