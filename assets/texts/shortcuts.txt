@@ -11,6 +11,7 @@ Shift+Tab — Уменьшить отступ
 Ctrl+N / Cmd+N — Новый документ
 Ctrl+T / Cmd+T — Новая вкладка
 Ctrl+O / Cmd+O — Открыть файл
+Перетаскивание файла в окно — Открыть файл
 Ctrl+S / Cmd+S — Сохранить
 Ctrl+Shift+S / Cmd+Shift+S — Сохранить как
 Ctrl+W / Cmd+W — Закрыть вкладку
