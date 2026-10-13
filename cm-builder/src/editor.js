@@ -183,6 +183,89 @@ function resolveDefaultMediaSizes(html) {
 // — [текст](url) — открывается в браузере
 // — [текст](url+) — открывается в новом окне приложения
 // — блоки ```mermaid / ```chart / ```nomnoml — контейнеры для отрисовки диаграмм
+// Чекбокс задачи — свой значок. Клик по нему в превью переключает [ ] / [x] в тексте.
+function taskBox({ checked }) {
+  const on = checked ? " is-checked" : "";
+  const label = checked ? "Сделано" : "Не сделано";
+  return `<span class="task-box${on}" role="checkbox" aria-checked="${checked ? "true" : "false"}" title="${label}"></span> `;
+}
+
+// Пункты-задачи в том порядке, в каком marked нарисует квадратики.
+function collectTaskItems(tokens, out) {
+  for (const token of tokens) {
+    if (token.type === "list") {
+      for (const item of token.items) {
+        if (item.task) out.push(item);
+        if (item.tokens) collectTaskItems(item.tokens, out);
+      }
+    } else if (token.tokens && token.type !== "code") {
+      collectTaskItems(token.tokens, out);
+    }
+  }
+}
+
+// Позиции «[ ]» / «[x]» в исходнике. from указывает на «[».
+// raw пункта у marked без отступа, поэтому ищем первую строку пункта,
+// а совпадения внутри ``` не считаем.
+function fenceRanges(text) {
+  const ranges = [];
+  const re = /^[ ]{0,3}(`{3,}|~{3,})/gm;
+  let open = null;
+  let m;
+  while ((m = re.exec(text))) {
+    const fence = m[1];
+    if (!open) {
+      open = { start: m.index, ch: fence[0], len: fence.length };
+    } else if (fence[0] === open.ch && fence.length >= open.len) {
+      const lineEnd = text.indexOf("\n", m.index);
+      ranges.push([open.start, lineEnd < 0 ? text.length : lineEnd + 1]);
+      open = null;
+    }
+  }
+  if (open) ranges.push([open.start, text.length]);
+  return ranges;
+}
+
+function taskCheckPositions(text) {
+  const items = [];
+  collectTaskItems(marked.lexer(text), items);
+  const fences = fenceRanges(text);
+  const positions = [];
+  let cursor = 0;
+  for (const item of items) {
+    const line = item.raw.split("\n")[0];
+    const box = /\[([ xX])\]/.exec(line);
+    if (!box) return [];
+    let at = text.indexOf(line, cursor);
+    while (at >= 0 && fences.some(([a, b]) => at >= a && at < b)) {
+      at = text.indexOf(line, at + line.length);
+    }
+    if (at < 0) return [];
+    positions.push({ from: at + box.index, checked: box[1] !== " " });
+    cursor = at + line.length;
+  }
+  return positions;
+}
+
+function bindTaskToggles(previewEl, content) {
+  if (view.state.readOnly) return;
+  const positions = taskCheckPositions(content);
+  const boxes = previewEl.querySelectorAll(".task-box");
+  if (boxes.length !== positions.length) return;
+  boxes.forEach((el, i) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const task = positions[i];
+      const insert = task.checked ? "[ ]" : "[x]";
+      view.dispatch({
+        changes: { from: task.from, to: task.from + 3, insert },
+        userEvent: "input",
+      });
+    });
+  });
+}
+
 const renderer = {
   link({ href, title, text }) {
     const openInApp = href.endsWith("+");
@@ -201,6 +284,7 @@ const renderer = {
     // Для остальных блоков — пусть marked обрабатывает стандартно (возвращаем null/false)
     return false;
   },
+  checkbox: taskBox,
 };
 marked.use({ renderer });
 
@@ -416,6 +500,7 @@ function updatePreview(force) {
 
   bindPreviewLinks(previewEl, ".external-link", "open_external");
   bindPreviewLinks(previewEl, ".app-link", "open_in_app_window");
+  bindTaskToggles(previewEl, content);
 }
 
 // Настройки размера по умолчанию применяются к уже открытому документу
@@ -963,8 +1048,9 @@ window.getSearchCursorPos = function () {
 
 // ===== Функции форматирования Markdown (панель инструментов) =====
 // Инлайн-маркеры (**, *, ~~, `, <u>) ставятся отдельно на каждую строку
-// выделения: Markdown не продолжает выделение через пустую строку, заголовок
-// или пункт списка, поэтому обёртка всего блока целиком не работает.
+// выделения и на каждую ячейку таблицы: Markdown не продолжает выделение
+// через пустую строку, заголовок, пункт списка или символ |, поэтому
+// обёртка всего блока целиком не работает.
 // Однородное выделение переключается; смешанное (часть текста уже
 // отформатирована) приводится к состоянию символа, с которого начато выделение.
 // Блочные команды (списки, цитата, заголовки) переключаются для всех строк
@@ -976,8 +1062,12 @@ window.getSearchCursorPos = function () {
 const INLINE_PREFIX_RE = /^(?:\s*>)*\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?(?:#{1,6}\s+)?/;
 // Префикс до маркера списка/заголовка: отступ и уровни цитаты
 const LEAD_RE = /^(?:\s*>)*\s*/;
+// CommonMark: черта — это строка из трёх и более одинаковых -, * или _.
+// Вставка из панели всегда пишет ---. * и _ остаются, чтобы чужой Markdown
+// не превращался в текст: *** на отдельной строке — черта, а не жирный курсив.
 const HR_RE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
 const TABLE_ROW_RE = /^\s*\|/;
+const TABLE_SEP_CELL_RE = /^\s*:?-+:?\s*$/;
 const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 
 // Маркеры из повторяющегося символа: допустимая длина серии символов.
@@ -1106,20 +1196,95 @@ function parseInline(text, start, before, after) {
   return { kinds, fmt, pairs };
 }
 
+// Ячейки строки таблицы: raw — всё между |, from/to — текст без крайних пробелов.
+// Экранированный \| остаётся внутри ячейки.
+function tableRawCells(text) {
+  const cells = [];
+  let i = 0;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  if (text[i] !== '|') return cells;
+  while (text[i] === '|') {
+    const rawFrom = i + 1;
+    let j = rawFrom;
+    while (j < text.length) {
+      if (text[j] === '\\' && text[j + 1] === '|') { j += 2; continue; }
+      if (text[j] === '|') break;
+      j++;
+    }
+    // Закрывающая | в конце строки — не начало ещё одной ячейки
+    if (j >= text.length && rawFrom === j) break;
+    let from = rawFrom, to = j;
+    while (from < to && /\s/.test(text[from])) from++;
+    while (to > from && /\s/.test(text[to - 1])) to--;
+    cells.push({ rawFrom, rawTo: j, from, to });
+    if (text[j] !== '|') break;
+    i = j;
+  }
+  return cells;
+}
+
+function isTableSeparator(text) {
+  if (!TABLE_ROW_RE.test(text)) return false;
+  const cells = tableRawCells(text);
+  return cells.length > 0 && cells.every(c => TABLE_SEP_CELL_RE.test(text.slice(c.rawFrom, c.rawTo)));
+}
+
+// false — строку таблицы форматировать нельзя (разделитель или курсор на |).
+// null — это не строка таблицы. Иначе ячейка под курсором.
+function tableCellAtCursor(line, head) {
+  if (!TABLE_ROW_RE.test(line.text)) return null;
+  if (isTableSeparator(line.text)) return false;
+  const rel = head - line.from;
+  const hit = tableRawCells(line.text).find(c =>
+    (rel >= c.rawFrom && rel < c.rawTo) || (rel === c.rawTo && c.rawTo === line.text.length));
+  return hit || false;
+}
+
+function cellScope(line, cell) {
+  return {
+    text: line.text.slice(cell.from, cell.to),
+    from: line.from + cell.from,
+    to: line.from + cell.to,
+  };
+}
+
+// Участки строки, которые можно обернуть маркерами. В таблице — по ячейке:
+// выделение на всю таблицу не должно захватывать | и строку-разделитель.
+function segmentsInLine(line, selFrom, selTo, before, after) {
+  if (TABLE_ROW_RE.test(line.text)) {
+    if (isTableSeparator(line.text)) return [];
+    const segs = [];
+    for (const cell of tableRawCells(line.text)) {
+      if (cell.from >= cell.to) continue;
+      const scope = cellScope(line, cell);
+      const from = Math.max(selFrom, scope.from);
+      const to = Math.min(selTo, scope.to);
+      if (from >= to) continue;
+      const seg = inlineSegment(scope, from, to, before, after, 0);
+      if (seg && seg.selected.length) segs.push(seg);
+    }
+    return segs;
+  }
+  const seg = inlineSegment(line, selFrom, selTo, before, after);
+  return seg && seg.selected.length ? [seg] : [];
+}
+
 // Участок строки под инлайн-маркеры: без блочного префикса и крайних
 // пробелов. region — участок, который будет перестроен: выделение плюс
 // все обёртки, пересекающие его или вплотную к нему примыкающие.
-function inlineSegment(line, selFrom, selTo, before, after) {
+// fixedPrefix задаётся для ячейки таблицы: у неё нет маркера списка или заголовка.
+function inlineSegment(line, selFrom, selTo, before, after, fixedPrefix) {
   const text = line.text;
-  if (HR_RE.test(text)) return null;
-  const prefix = INLINE_PREFIX_RE.exec(text)[0].length;
+  if (fixedPrefix == null && HR_RE.test(text)) return null;
+  const prefix = fixedPrefix != null ? fixedPrefix : INLINE_PREFIX_RE.exec(text)[0].length;
   let from = Math.max(selFrom - line.from, prefix);
   let to = Math.min(selTo, line.to) - line.from;
   while (from < to && /\s/.test(text[from])) from++;
   while (to > from && /\s/.test(text[to - 1])) to--;
   if (from >= to) return null;
-  // Ячейки таблицы оборачиваются по одной, иначе строка таблицы ломается
-  if (TABLE_ROW_RE.test(text) && text.slice(from, to).includes('|')) return null;
+  // Запасной стоп: обёртка через | ломает строку таблицы. Обычный путь
+  // режет строку на ячейки в segmentsInLine и сюда | уже не приносит.
+  if (fixedPrefix == null && TABLE_ROW_RE.test(text) && text.slice(from, to).includes('|')) return null;
   const parsed = parseInline(text, prefix, before, after);
   let rFrom = from, rTo = to;
   for (const p of parsed.pairs) {
@@ -1188,7 +1353,21 @@ function wrapSelection(before, after) {
   const word = sel.empty ? state.wordAt(sel.head) : null;
   if (sel.empty) {
     const line = doc.lineAt(sel.head);
-    const seg = word && inlineSegment(line, word.from, word.to, before, after);
+    const cell = tableCellAtCursor(line, sel.head);
+    if (cell === false) return;
+    let scope = line;
+    let prefix;
+    let wordFrom = word && word.from;
+    let wordTo = word && word.to;
+    if (cell && cell.from < cell.to) {
+      scope = cellScope(line, cell);
+      prefix = 0;
+      if (word) {
+        wordFrom = Math.max(word.from, scope.from);
+        wordTo = Math.min(word.to, scope.to);
+      }
+    }
+    const seg = word && wordFrom < wordTo && inlineSegment(scope, wordFrom, wordTo, before, after, prefix);
     if (!seg || !seg.selected.length) {
       const pos = sel.head - line.from;
       if (pos >= before.length && line.text.slice(pos - before.length, pos) === before
@@ -1205,8 +1384,7 @@ function wrapSelection(before, after) {
     const blocks = codeBlocks(doc);
     for (const line of selectedLines(state)) {
       if (inCodeBlock(blocks, line.number)) continue;
-      const seg = inlineSegment(line, sel.from, sel.to, before, after);
-      if (seg && seg.selected.length) segments.push(seg);
+      segments.push(...segmentsInLine(line, sel.from, sel.to, before, after));
     }
     if (!segments.length) return;
   }
@@ -1302,6 +1480,23 @@ window.toggleOrderedList = function () {
     const mark = m[2] || '';
     return { at: m[1].length, len: mark.length, has: /^\d/.test(mark) };
   }, i => (i + 1) + '. ');
+};
+
+// Задача — пункт списка с «[ ]». Повтор снимает только скобки, маркер списка остаётся.
+window.toggleTaskList = function () {
+  toggleLineMarkup(text => {
+    const m = LIST_MARK_RE.exec(text);
+    const lead = m[1].length;
+    const mark = m[2] || '';
+    const task = /^\[([ xX])\]\s*/.exec(text.slice(lead + mark.length));
+    if (task) return { at: lead + mark.length, len: task[0].length, has: true, existing: task[0], mark };
+    return { at: lead, len: mark.length, has: false, mark };
+  }, (i, p) => {
+    if (p.has) return p.existing;
+    if (/^\d/.test(p.mark)) return p.mark + '[ ] ';
+    if (p.mark) return p.mark.trimEnd() + ' [ ] ';
+    return '- [ ] ';
+  });
 };
 
 window.toggleBlockquote = function () {
@@ -1466,6 +1661,7 @@ exportRenderer.code = function ({ text, lang }) {
   if (info.type === "nomnoml") return nomnomlBlock(text, info.width);
   return false;
 };
+exportRenderer.checkbox = taskBox;
 
 window.getRenderedBodyHTMLExport = () =>
   resolveDefaultMediaSizes(

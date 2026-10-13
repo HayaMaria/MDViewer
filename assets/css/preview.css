@@ -83,6 +83,41 @@
   margin: 8px 0;
 }
 
+/* Задачи: - [ ] / - [x]. Маркер списка убирается, квадрат стоит на его месте. */
+#preview li:has(.task-box) {
+  list-style: none;
+}
+
+#preview .task-box {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 0.85em;
+  height: 0.85em;
+  margin: 0 0.4em 0.12em -1.25em;
+  vertical-align: middle;
+  border: 1.5px solid currentColor;
+  border-radius: 0.18em;
+  position: relative;
+  user-select: none;
+  cursor: pointer;
+}
+
+#preview .task-box:hover {
+  border-color: var(--link-color);
+}
+
+#preview .task-box.is-checked::after {
+  content: "";
+  position: absolute;
+  left: 0.22em;
+  top: 0.02em;
+  width: 0.22em;
+  height: 0.42em;
+  border: solid currentColor;
+  border-width: 0 0.12em 0.12em 0;
+  transform: rotate(45deg);
+}
+
 #preview code {
   background: var(--code-bg);
   padding: 2px 6px;
