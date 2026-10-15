@@ -1,14 +1,20 @@
-// Рендер блоков ```chart. Chart.js берётся из глобального window.Chart:
-// в приложении его кладёт editor.js, в экспортированном HTML — chart.umd.min.js.
+// Рендер блоков ```chart. Библиотека берётся из глобального window.Chart:
+// в приложении её подключает редактор, в экспортированном HTML — chart.umd.min.js.
 
 const THEME_COLORS = {
   dark: { color: '#d4d4d4', backgroundColor: '#1e1e1e', borderColor: '#444', headColor: '#e1e1e1', gridColor: '#333' },
   light: { color: '#666', backgroundColor: '#ffffff', borderColor: '#ddd', headColor: '#1a1a1a', gridColor: '#e0e0e0' },
 };
 
+// Конструктор появляется в window.Chart после загрузки файла библиотеки.
+function C() {
+  return window.Chart;
+}
+
 // headColor и gridColor — собственные поля, читаются в renderChart
 export function applyChartTheme(dark) {
-  Object.assign(Chart.defaults, THEME_COLORS[dark ? 'dark' : 'light']);
+  if (!C()) return;
+  Object.assign(C().defaults, THEME_COLORS[dark ? 'dark' : 'light']);
 }
 
 const COLORS = [
@@ -144,14 +150,14 @@ function styledDatasets(parsed, style) {
         fill: true,
         tension: 0.3,
         pointBackgroundColor: COLORS[0],
-        pointBorderColor: Chart.defaults.backgroundColor,
+        pointBorderColor: C().defaults.backgroundColor,
       };
     }
     if (!many && style === "pie") {
       return {
         data: ds.data,
         backgroundColor: COLORS.slice(0, parsed.labels.length),
-        borderColor: Chart.defaults.backgroundColor,
+        borderColor: C().defaults.backgroundColor,
         borderWidth: 2,
       };
     }
@@ -162,7 +168,7 @@ function styledDatasets(parsed, style) {
         backgroundColor: COLORS[0] + "33",
         borderColor: COLORS[0],
         pointBackgroundColor: COLORS[0],
-        pointBorderColor: Chart.defaults.backgroundColor,
+        pointBorderColor: C().defaults.backgroundColor,
         pointRadius: 4,
       };
     }
@@ -177,14 +183,14 @@ function styledDatasets(parsed, style) {
       item.fill = false;
       item.tension = 0.3;
       item.pointBackgroundColor = color;
-      item.pointBorderColor = Chart.defaults.backgroundColor;
+      item.pointBorderColor = C().defaults.backgroundColor;
     }
     if (style === "radar") {
       item.pointBackgroundColor = color;
       item.pointRadius = 4;
-      item.pointBorderColor = Chart.defaults.backgroundColor;
+      item.pointBorderColor = C().defaults.backgroundColor;
     }
-    if (style === "pie") item.borderColor = Chart.defaults.backgroundColor;
+    if (style === "pie") item.borderColor = C().defaults.backgroundColor;
     return item;
   });
 }
@@ -224,8 +230,8 @@ export function renderChart(codeText, containerId) {
   // перерисовке превью остаются «висящие» инстансы с ResizeObserver'ами)
   try {
     const oldCanvas = container.querySelector('canvas');
-    const oldChart = oldCanvas ? Chart.getChart(oldCanvas) : null;
-    if (oldChart) oldChart.destroy();
+    const oldChart = oldCanvas ? C().getChart(oldCanvas) : null;
+    if (oldChart) oldC().destroy();
   } catch (e) { }
   const parsed = parseChartDSL(codeText);
   if (!parsed) {
@@ -250,10 +256,10 @@ export function renderChart(codeText, containerId) {
         data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'column') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: C().defaults.color } } },
           scales: {
-            y: { beginAtZero: true, grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: Chart.defaults.color } },
-            x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: Chart.defaults.color } },
+            y: { beginAtZero: true, grid: { color: C().defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: C().defaults.color } },
+            x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: C().defaults.color } },
           },
         },
       };
@@ -265,10 +271,10 @@ export function renderChart(codeText, containerId) {
         data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'line') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: C().defaults.color } } },
           scales: {
-            y: { beginAtZero: true, grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: Chart.defaults.color } },
-            x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: Chart.defaults.color } },
+            y: { beginAtZero: true, grid: { color: C().defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel, color: C().defaults.color } },
+            x: { grid: { display: false }, title: { display: !!parsed.xlabel, text: parsed.xlabel, color: C().defaults.color } },
           },
         },
       };
@@ -281,8 +287,8 @@ export function renderChart(codeText, containerId) {
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor },
-            legend: { labels: { color: Chart.defaults.color } },
+            title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor },
+            legend: { labels: { color: C().defaults.color } },
             tooltip: {
               callbacks: {
                 label: function(ctx) {
@@ -308,10 +314,10 @@ export function renderChart(codeText, containerId) {
           })) },
           options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { labels: { color: Chart.defaults.color } } },
+            plugins: { title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor }, legend: { labels: { color: C().defaults.color } } },
             scales: {
-              x: { grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.xlabel, text: parsed.xlabel || 'X', color: Chart.defaults.color } },
-              y: { grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel || 'Y', color: Chart.defaults.color } },
+              x: { grid: { color: C().defaults.gridColor }, title: { display: !!parsed.xlabel, text: parsed.xlabel || 'X', color: C().defaults.color } },
+              y: { grid: { color: C().defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel || 'Y', color: C().defaults.color } },
             },
           },
         };
@@ -321,10 +327,10 @@ export function renderChart(codeText, containerId) {
           data: { datasets: [{ label: parsed.title || 'Data', data: parsed.values, backgroundColor: COLORS[0], borderColor: COLORS[0], pointRadius: 3.5, pointHoverRadius: 6 }] },
           options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: false } },
+            plugins: { title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor }, legend: { display: false } },
             scales: {
-              x: { grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.xlabel, text: parsed.xlabel || 'X', color: Chart.defaults.color } },
-              y: { grid: { color: Chart.defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel || 'Y', color: Chart.defaults.color } },
+              x: { grid: { color: C().defaults.gridColor }, title: { display: !!parsed.xlabel, text: parsed.xlabel || 'X', color: C().defaults.color } },
+              y: { grid: { color: C().defaults.gridColor }, title: { display: !!parsed.ylabel, text: parsed.ylabel || 'Y', color: C().defaults.color } },
             },
           },
         };
@@ -337,9 +343,9 @@ export function renderChart(codeText, containerId) {
         data: { labels: parsed.labels, datasets: styledDatasets(parsed, 'radar') },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { title: { display: !!parsed.title, text: parsed.title, color: Chart.defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: Chart.defaults.color } } },
+          plugins: { title: { display: !!parsed.title, text: parsed.title, color: C().defaults.headColor }, legend: { display: parsed.datasets.length > 1, labels: { color: C().defaults.color } } },
           scales: {
-            r: { grid: { color: Chart.defaults.gridColor }, angleLines: { color: Chart.defaults.gridColor }, pointLabels: { color: Chart.defaults.color }, beginAtZero: true, ticks: { display: false, stepSize: 1 } },
+            r: { grid: { color: C().defaults.gridColor }, angleLines: { color: C().defaults.gridColor }, pointLabels: { color: C().defaults.color }, beginAtZero: true, ticks: { display: false, stepSize: 1 } },
           },
         },
       };
@@ -349,6 +355,6 @@ export function renderChart(codeText, containerId) {
   if (config) {
     const w = parseInt(container.getAttribute("data-mdv-width"), 10) || 600;
     applyMediaScale(config, w / 600);
-    new Chart(canvas.getContext('2d'), config);
+    new (C())(canvas.getContext('2d'), config);
   }
 }

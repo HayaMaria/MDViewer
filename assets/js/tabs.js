@@ -91,7 +91,9 @@
     var tab = tabs[active];
     if (!tab || tab.html || window.__htmlMode || !live) return;
     if (window.__cmView) tab.editorState = window.__cmView.state;
-    tab.content = typeof live.content === 'string' ? live.content : tab.content;
+    if (live.includeContent !== false && typeof live.content === 'string') {
+      tab.content = live.content;
+    }
     tab.anchor = live.anchor || 0;
     tab.head = live.head || 0;
     tab.scroll = live.scroll || 0;
@@ -100,7 +102,7 @@
     if (tab.dirty) tab.welcome = false;
   }
 
-  function serializeTab(tab) {
+  function serializeTab(tab, includeContent) {
     var item = {
       html: !!tab.html,
       path: tab.path,
@@ -112,16 +114,17 @@
       scroll: tab.scroll || 0,
       previewScroll: tab.previewScroll || 0,
     };
-    if (item.dirty) item.content = tab.content || '';
+    if (item.dirty && includeContent) item.content = tab.content || '';
     return item;
   }
 
   window.collectSessionState = function (live) {
     syncActive(live);
+    var includeContent = !live || live.includeContent !== false;
     return {
       epoch: live.epoch,
       active: active < 0 ? 0 : active,
-      tabs: tabs.map(serializeTab),
+      tabs: tabs.map(function (tab) { return serializeTab(tab, includeContent); }),
     };
   };
 

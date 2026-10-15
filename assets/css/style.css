@@ -140,7 +140,6 @@ body {
 #editor .cm-scroller {
   height: 100% !important;
   overflow-x: hidden !important;
-  contain: none !important;
 }
 
 /* CodeMirror — светлая тема */
@@ -694,11 +693,7 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   cursor: pointer;
 }
 
-/* Mermaid рисуется светлой палитрой — в тёмной теме инвертируем; графики чуть приглушаем */
-[data-theme="dark"] .mermaid svg {
-  filter: invert(0.87) brightness(0.95);
-}
-
+/* Графики чуть приглушаем. Схемы Mermaid рисуются своей тёмной палитрой. */
 [data-theme="dark"] [id^='chart-'] {
   filter: brightness(0.85);
 }

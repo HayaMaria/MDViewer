@@ -6,16 +6,13 @@ import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } fr
 import { indentUnit } from "@codemirror/language";
 import { defaultKeymap, historyKeymap, undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
-import mermaid from "mermaid";
-import { Chart, registerables } from "chart.js";
 import { applyChartTheme, renderChart } from "./charts.js";
 import { highlightCodeBlock } from "./highlight.js";
 import { editorCodeLanguage } from "./code-languages.js";
 import mermaidThemes from "../../assets/mermaid-themes.json";
 
-// Mermaid в превью всегда рисуется светлой палитрой; в тёмной теме его инвертирует CSS.
-// useMaxWidth:false — SVG в натуральном размере (не растягивается на 100% контейнера).
-mermaid.initialize(mermaidThemes.light);
+// Mermaid и Chart.js не входят в бандл редактора: их файлы подключаются,
+// когда в документе появляется первая такая схема.
 
 // 600 — «нормальный» масштаб Mermaid. Одно и то же число зумит все схемы одинаково:
 // текст и блоки одного размера, ширина картинки зависит от того, сколько в ней элементов.
@@ -72,11 +69,8 @@ function scaleDiagramSvg(container) {
 }
 window.scaleDiagramSvg = scaleDiagramSvg;
 
-Chart.register(...registerables);
-window.Chart = Chart;
 window.renderChart = renderChart;
 window.applyChartTheme = applyChartTheme;
-applyChartTheme(true);
 
 // Счётчик для уникальных id графиков
 let chartCounter = 0;
@@ -249,21 +243,36 @@ function taskCheckPositions(text) {
   return positions;
 }
 
-function bindTaskToggles(previewEl, content) {
-  if (view.state.readOnly) return;
-  const positions = taskCheckPositions(content);
-  const boxes = previewEl.querySelectorAll(".task-box");
-  if (boxes.length !== positions.length) return;
-  boxes.forEach((el, i) => {
-    el.addEventListener("click", (e) => {
+// Один слушатель на колонку: блоки при правке живут долго, и вешать
+// клик заново на каждую перерисовку нельзя — он сработал бы дважды.
+function setupPreviewClicks(previewEl) {
+  if (previewEl.dataset.clicksBound) return;
+  previewEl.dataset.clicksBound = "1";
+  previewEl.addEventListener("click", (e) => {
+    const link = e.target.closest(".external-link, .app-link");
+    if (link && previewEl.contains(link)) {
       e.preventDefault();
       e.stopPropagation();
-      const task = positions[i];
-      const insert = task.checked ? "[ ]" : "[x]";
-      view.dispatch({
-        changes: { from: task.from, to: task.from + 3, insert },
-        userEvent: "input",
-      });
+      if (link.dataset.url) {
+        const method = link.classList.contains("app-link") ? "open_in_app_window" : "open_external";
+        window.callApi(method, link.dataset.url);
+      }
+      return;
+    }
+    const box = e.target.closest(".task-box");
+    if (!box || !previewEl.contains(box) || view.state.readOnly) return;
+    const positions = taskCheckPositions(view.state.doc.toString());
+    const boxes = previewEl.querySelectorAll(".task-box");
+    if (boxes.length !== positions.length) return;
+    const index = Array.prototype.indexOf.call(boxes, box);
+    const task = positions[index];
+    if (!task) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const insert = task.checked ? "[ ]" : "[x]";
+    view.dispatch({
+      changes: { from: task.from, to: task.from + 3, insert },
+      userEvent: "input",
     });
   });
 }
@@ -291,14 +300,12 @@ const renderer = {
 };
 marked.use({ renderer });
 
-// ===== Производительность превью: debounce + кэш диаграмм =====
-// Превью перестраивается через innerHTML, поэтому на каждое нажатие клавиши
-// заново отрисовывались ВСЕ диаграммы (mermaid/nomnoml) — на документах со
-// множеством схем ввод «зависал». Теперь:
-//  1) перестройка откладывается до паузы в наборе (debounce);
-//  2) отрендеренные SVG кэшируются по сигнатуре (тип + исходник [+ тема]) и
-//     восстанавливаются мгновенно, а mermaid.run запускается только для
-//     новых/изменённых диаграмм.
+// ===== Производительность превью: debounce + правка одного блока =====
+// Превью не пересобирается целиком. Текст делится на блоки (абзац, список,
+// схема), и после паузы в наборе заменяется только изменившийся блок.
+// График, Mermaid и nomnoml в остальных блоках остаются в DOM как есть.
+// SVG новых схем ещё и кэшируется: повторная вставка того же кода не считает
+// диаграмму заново.
 
 // Задержка до перестройки превью после последнего изменения текста (мс)
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -315,9 +322,7 @@ function getPreviewTheme() {
   return document.documentElement.getAttribute("data-theme") || "dark";
 }
 
-// Mermaid инициализируется один раз с фиксированной палитрой и не зависит от
-// темы приложения, поэтому тема в его сигнатуру не входит. nomnoml
-// перекрашивается под тему — тема входит в его сигнатуру.
+// И Mermaid, и nomnoml перекрашиваются под тему, поэтому тема входит в сигнатуру.
 function makeDiagramSignature(kind, code, withTheme) {
   return kind + "\u0000" + (withTheme ? getPreviewTheme() + "\u0000" : "") + code;
 }
@@ -350,15 +355,316 @@ function schedulePreviewUpdate() {
   }, PREVIEW_DEBOUNCE_MS);
 }
 
-// Блоки документа лежат в .mdv-column. Якорь прокрутки смотрит на них, не на обёртку.
-function previewBlocks(previewEl) {
-  const column = previewEl.querySelector(":scope > .mdv-column");
-  return Array.from((column || previewEl).children);
+// Уже показанные блоки: исходник и его обёртка в колонке превью.
+let liveBlocks = [];
+// Определения ссылок [имя]: url. Если карта изменилась, старые блоки
+// держат прежний адрес — тогда колонку собираем заново.
+let liveLinksKey = "";
+
+// Обёртка с display:contents сама без рамки — якорь смотрит на первый настоящий элемент.
+function blockBox(el) {
+  return (el && el.firstElementChild) || el;
+}
+
+// Верхний видимый блок и насколько его верх ушёл за кромку панели.
+function measureAnchor(els, previewEl) {
+  const panelTop = previewEl.getBoundingClientRect().top;
+  let index = 0;
+  let offset = 0;
+  for (let i = 0; i < els.length; i++) {
+    const box = blockBox(els[i]);
+    if (!box) continue;
+    const top = box.getBoundingClientRect().top;
+    if (top <= panelTop + 1) {
+      index = i;
+      offset = top - panelTop;
+    } else break;
+  }
+  return { index, offset };
+}
+
+// Держим якорный блок на том же месте, чтобы перерисовка не прыгала к началу.
+function pinScroll(previewEl, el, offset) {
+  const box = blockBox(el);
+  if (!box || !box.isConnected) return;
+  const contentTop = box.getBoundingClientRect().top
+    - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
+  const desired = Math.max(0, contentTop - offset);
+  if (Math.abs(desired - previewEl.scrollTop) > 0.5) {
+    syncScroll.lock = "editor";
+    previewEl.scrollTop = desired;
+  }
+}
+
+// Общий префикс и суффикс совпадающих блоков. Меняется только середина.
+function changedRange(prev, nextRaws) {
+  const prevLen = prev.length;
+  const nextLen = nextRaws.length;
+  let start = 0;
+  while (start < prevLen && start < nextLen && prev[start].raw === nextRaws[start]) start++;
+  let prevEnd = prevLen;
+  let nextEnd = nextLen;
+  while (prevEnd > start && nextEnd > start && prev[prevEnd - 1].raw === nextRaws[nextEnd - 1]) {
+    prevEnd--;
+    nextEnd--;
+  }
+  return { start, prevEnd, nextEnd };
+}
+
+// Блоки документа. Пробелы и определения ссылок сами по себе не рисуются.
+// null — лексер покрыл не весь текст, тогда рисуем документ одним куском.
+function previewBlockTokens(content) {
+  const tokens = marked.lexer(content);
+  let covered = "";
+  const blocks = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    covered += token.raw || "";
+    if (token.type === "space" || token.type === "def") continue;
+    if (token.raw) blocks.push(token);
+  }
+  if (covered !== content) return null;
+  return { blocks, links: tokens.links || {} };
+}
+
+function renderBlockElement(token, links) {
+  const wrap = document.createElement("div");
+  wrap.className = "mdv-block";
+  const list = [token];
+  list.links = links || {};
+  wrap.innerHTML = processImageSizes(marked.parser(list));
+  return wrap;
+}
+
+function destroyCharts(root) {
+  const api = window.Chart;
+  if (!root || !api) return;
+  root.querySelectorAll("canvas").forEach((canvas) => {
+    try {
+      const chart = api.getChart(canvas);
+      if (chart) chart.destroy();
+    } catch (e) { }
+  });
+}
+
+// Отдельный файл библиотеки. Повторный вызов ждёт уже начатую загрузку.
+function loadScript(src) {
+  const existing = document.querySelector('script[data-mdv-src="' + src + '"]');
+  if (existing && existing.dataset.ready === "1") return Promise.resolve();
+  if (existing && existing._mdvPromise) return existing._mdvPromise;
+  const script = existing || document.createElement("script");
+  const ready = new Promise((resolve, reject) => {
+    script.onload = () => {
+      script.dataset.ready = "1";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(src));
+  });
+  script._mdvPromise = ready;
+  if (!existing) {
+    script.src = src;
+    script.dataset.mdvSrc = src;
+    document.head.appendChild(script);
+  }
+  return ready;
+}
+
+let mermaidThemeApplied = null;
+
+function ensureMermaid() {
+  return loadScript("lib/mermaid.min.js").then(() => {
+    const name = getPreviewTheme() === "light" ? "light" : "dark";
+    if (mermaidThemeApplied !== name && window.mermaid) {
+      window.mermaid.initialize(mermaidThemes[name] || mermaidThemes.light);
+      mermaidThemeApplied = name;
+    }
+    return window.mermaid;
+  });
+}
+
+function ensureChart() {
+  if (window.Chart) return Promise.resolve(window.Chart);
+  return loadScript("lib/chart.umd.min.js").then(() => {
+    applyChartTheme(getPreviewTheme() !== "light");
+    return window.Chart;
+  });
+}
+
+function ensureNomnoml() {
+  if (window.nomnoml) return Promise.resolve(window.nomnoml);
+  return loadScript("lib/graphre.js").then(() => loadScript("lib/nomnoml.min.js"));
+}
+
+// Очередь схем вне экрана: по одной за кадр, чтобы первое открытие не замирало.
+const diagramQueue = [];
+let diagramPump = 0;
+
+function nearPreview(el) {
+  const preview = document.getElementById("preview");
+  if (!preview || !el || !el.isConnected) return false;
+  const view = preview.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  const margin = 240;
+  return box.bottom >= view.top - margin && box.top <= view.bottom + margin;
+}
+
+function rememberMermaid(el) {
+  const svg = el.innerHTML;
+  if (svg && svg.indexOf("<svg") !== -1) {
+    svgCachePut(makeDiagramSignature("mermaid", el.dataset.code || "", true), svg);
+  }
+  scaleDiagramSvg(el);
+}
+
+function paintMermaid(nodes) {
+  if (!nodes.length) return Promise.resolve();
+  return ensureMermaid().then((api) => {
+    const fresh = [];
+    nodes.forEach((el) => {
+      if (!el.isConnected) return;
+      const key = makeDiagramSignature("mermaid", el.dataset.code || "", true);
+      const cached = svgCacheGet(key);
+      if (cached !== undefined) {
+        el.innerHTML = cached;
+        scaleDiagramSvg(el);
+        return;
+      }
+      if (el.querySelector("svg") && el.dataset.code) {
+        el.textContent = decodeURIComponent(el.dataset.code);
+      }
+      fresh.push(el);
+    });
+    if (!fresh.length || !api) return;
+    return Promise.resolve(api.run({ nodes: fresh })).catch(() => { }).then(() => {
+      fresh.forEach((el) => {
+        if (el.isConnected) rememberMermaid(el);
+      });
+    });
+  }).catch(() => { });
+}
+
+function paintChart(el) {
+  return ensureChart().then(() => {
+    if (!el.isConnected) return;
+    const code = decodeURIComponent(el.dataset.chartCode || "");
+    if (!code) return;
+    const w = diagramTargetWidth(el);
+    el.setAttribute("data-mdv-width", String(w));
+    el.style.width = w + "px";
+    el.style.maxWidth = "none";
+    el.style.height = Math.round(w * 5 / 8) + "px";
+    renderChart(code, el.id);
+  }).catch(() => { });
+}
+
+function paintNomnoml(el) {
+  const code = decodeURIComponent(el.dataset.nomnomlCode || "");
+  if (!code || !el.isConnected) return Promise.resolve();
+  const key = makeDiagramSignature("nomnoml", code, true);
+  const cached = svgCacheGet(key);
+  if (cached !== undefined) {
+    el.innerHTML = cached;
+    scaleDiagramSvg(el);
+    return Promise.resolve();
+  }
+  return ensureNomnoml().then(() => {
+    if (!el.isConnected || typeof window.renderNomnoml !== "function") return;
+    try {
+      window.renderNomnoml(el, code);
+      if (el.innerHTML.indexOf("<svg") !== -1) {
+        svgCachePut(key, el.innerHTML);
+        scaleDiagramSvg(el);
+      }
+    } catch (e) {
+      el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
+    }
+  }).catch(() => { });
+}
+
+function paintOne(el) {
+  if (!el || !el.isConnected) return Promise.resolve();
+  if (el.classList.contains("mermaid")) return paintMermaid([el]);
+  if (el.classList.contains("nomnoml-diagram")) return paintNomnoml(el);
+  if ((el.id || "").indexOf("chart-") === 0) return paintChart(el);
+  return Promise.resolve();
+}
+
+function pumpDiagrams() {
+  if (diagramPump || !diagramQueue.length) return;
+  const step = () => {
+    diagramPump = 0;
+    if (!diagramQueue.length) return;
+    let index = 0;
+    for (let i = 0; i < diagramQueue.length; i++) {
+      if (nearPreview(diagramQueue[i])) {
+        index = i;
+        break;
+      }
+    }
+    const el = diagramQueue.splice(index, 1)[0];
+    paintOne(el).then(() => {
+      if (diagramQueue.length) diagramPump = requestAnimationFrame(step);
+    });
+  };
+  diagramPump = requestAnimationFrame(step);
+}
+
+function enqueueDiagram(el) {
+  if (diagramQueue.indexOf(el) === -1) diagramQueue.push(el);
+}
+
+window.rerenderMermaidTheme = function () {
+  mermaidThemeApplied = null;
+  const nodes = Array.from(document.querySelectorAll("#preview .mermaid"));
+  for (let i = diagramQueue.length - 1; i >= 0; i--) {
+    if (diagramQueue[i].classList && diagramQueue[i].classList.contains("mermaid")) {
+      if (nodes.indexOf(diagramQueue[i]) === -1) nodes.push(diagramQueue[i]);
+      diagramQueue.splice(i, 1);
+    }
+  }
+  return paintMermaid(nodes);
+};
+
+window.noteNomnomlSvg = function (el, code) {
+  if (!el || el.innerHTML.indexOf("<svg") === -1) return;
+  svgCachePut(makeDiagramSignature("nomnoml", code, true), el.innerHTML);
+};
+
+// Схемы на экране рисуются сразу. Остальные — по одной за кадр.
+function drawDiagrams(roots) {
+  const nodes = [];
+  const each = (selector, fn) => {
+    for (let i = 0; i < roots.length; i++) roots[i].querySelectorAll(selector).forEach(fn);
+  };
+  each(".mermaid", (el) => nodes.push(el));
+  each("[id^='chart-']", (el) => nodes.push(el));
+  each(".nomnoml-diagram", (el) => nodes.push(el));
+
+  const now = [];
+  nodes.forEach((el) => {
+    if (nearPreview(el)) now.push(el);
+    else enqueueDiagram(el);
+  });
+  pumpDiagrams();
+  const mermaids = now.filter((el) => el.classList.contains("mermaid"));
+  const rest = now.filter((el) => !el.classList.contains("mermaid"));
+  return paintMermaid(mermaids).then(() => Promise.all(rest.map(paintOne)));
+}
+
+function finishPreviewSettle(settleId, previewEl, pinEl, pinOffset) {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (settleId !== syncScrollSettle.id) return;
+    if (pinEl) pinScroll(previewEl, pinEl, pinOffset);
+    syncScroll.settling = false;
+    requestAnimationFrame(() => {
+      if (syncScroll.lock === "editor") syncScroll.lock = null;
+    });
+  }));
 }
 
 // Функция обновления превью
-// force=true — пропустить проверку «текст не менялся» (нужно после выхода из
-// режима просмотра HTML, когда DOM превью был очищен извне)
+// force=true — пропустить проверку «текст не менялся» и собрать колонку заново
+// (нужно после выхода из режима просмотра HTML и при смене размеров медиа)
 function updatePreview(force) {
   // В режиме просмотра HTML-файла превью занято iframe — не перерисовываем
   if (window.__htmlMode) return;
@@ -366,144 +672,96 @@ function updatePreview(force) {
   // Текст не менялся с прошлой перестройки — перерисовывать нечего
   if (!force && content === lastPreviewContent) return;
   lastPreviewContent = content;
-  const html = processImageSizes(marked.parse(content));
   const previewEl = document.getElementById("preview");
+  if (!previewEl) return;
+  setupPreviewClicks(previewEl);
 
-  // ===== Сохранение позиции при перерисовке =====
-  // innerHTML-перезапись уничтожает элементы: пока диаграммы (mermaid/chart)
-  // не отрендерились, высота превью резко падает, браузер клампит scrollTop
-  // к верху, а после рендера высота возвращается — позиция уже потеряна.
-  // Якорим верхний видимый блок и возвращаем его на место после стабилизации;
-  // на это время синхронизация заморожена (syncScroll.settling), чтобы
-  // служебные кламп-прокрутки не дёргали вторую панель.
+  const parsed = previewBlockTokens(content);
+  const tokens = parsed ? parsed.blocks : null;
+  const links = parsed ? parsed.links : {};
+  const linksKey = JSON.stringify(links);
+  const linksChanged = linksKey !== liveLinksKey;
+  liveLinksKey = linksKey;
+  // Лексер не покрыл текст — один блок на весь документ, правка заменяет его целиком.
+  const next = tokens || [{ raw: content, type: "fallback" }];
+  const nextRaws = next.map((token) => token.raw);
+
+  const column = previewEl.querySelector(":scope > .mdv-column");
+  const canPatch = !force
+    && !linksChanged
+    && !!tokens
+    && column
+    && liveBlocks.length > 0
+    && liveBlocks.every((b) => b.el.isConnected && b.el.parentNode === column);
+
   const settleId = ++syncScrollSettle.id;
   syncScroll.settling = true;
   syncScroll.lock = null;
 
-  // Якорь ДО перезаписи: блок у верхней кромки + его смещение от кромки
-  let anchorIndex = 0;
-  let anchorOffset = 0;
-  const panelTop = previewEl.getBoundingClientRect().top;
-  const oldKids = previewBlocks(previewEl);
-  for (let i = 0; i < oldKids.length; i++) {
-    if (oldKids[i].getBoundingClientRect().top <= panelTop) anchorIndex = i;
-    else break;
-  }
-  if (oldKids.length && anchorIndex < oldKids.length) {
-    anchorOffset = oldKids[anchorIndex].getBoundingClientRect().top - panelTop;
-  }
+  let pinEl = null;
+  let pinOffset = 0;
+  let freshRoots = [];
 
-  previewEl.innerHTML = '<div class="mdv-column">' + html + '</div>';
-
-  // Промежуточное восстановление (диаграммы ещё не отрендерены): держим
-  // якорный блок у кромки, чтобы не мигало и не улетало к верху
-  const kidsMid = previewBlocks(previewEl);
-  if (kidsMid.length && anchorIndex < kidsMid.length) {
-    const contentTop = kidsMid[anchorIndex].getBoundingClientRect().top
-      - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
-    syncScroll.lock = "editor"; // эхо этой установки не должно синхронизировать редактор
-    previewEl.scrollTop = Math.max(0, contentTop - anchorOffset);
-  }
-
-  // Рендерим схемы Mermaid: неизменённые диаграммы восстанавливаем из кэша SVG
-  // мгновенно, а mermaid.run({nodes}) запускаем только для новых/изменённых
-  // блоков (точечный рендер). Promise ждём в стабилизации ниже (ошибки глотаем).
-  let mermaidDone = Promise.resolve();
-  const pendingMermaid = [];
-  previewEl.querySelectorAll(".mermaid").forEach((el) => {
-    const key = makeDiagramSignature("mermaid", el.dataset.code || "", false);
-    const cached = svgCacheGet(key);
-    if (cached !== undefined) {
-      el.innerHTML = cached;
-      scaleDiagramSvg(el);
-    } else {
-      pendingMermaid.push(el);
+  if (!canPatch) {
+    const anchor = measureAnchor(liveBlocks.map((b) => b.el), previewEl);
+    liveBlocks.forEach((b) => destroyCharts(b.el));
+    destroyCharts(previewEl);
+    const newColumn = document.createElement("div");
+    newColumn.className = "mdv-column";
+    liveBlocks = next.map((token) => {
+      const el = tokens ? renderBlockElement(token, links) : renderFallback(content);
+      newColumn.appendChild(el);
+      return { raw: token.raw, el };
+    });
+    previewEl.replaceChildren(newColumn);
+    freshRoots = [newColumn];
+    if (liveBlocks.length) {
+      const idx = Math.min(anchor.index, liveBlocks.length - 1);
+      pinEl = liveBlocks[idx].el;
+      pinOffset = anchor.offset;
     }
-  });
-  if (pendingMermaid.length) {
-    try {
-      mermaidDone = Promise.resolve(mermaid.run({ nodes: pendingMermaid }))
-        .catch(() => { })
-        .then(() => {
-          // Кэшируем исходный SVG (viewBox), масштаб ставим отдельно —
-          // иначе смена width подставит картинку прошлого размера.
-          pendingMermaid.forEach((el) => {
-            const svg = el.innerHTML;
-            if (svg && svg.indexOf("<svg") !== -1) {
-              svgCachePut(makeDiagramSignature("mermaid", el.dataset.code || "", false), svg);
-            }
-            scaleDiagramSvg(el);
-          });
-        });
-    } catch (e) { }
-  }
-
-  // Рендерим графики Chart.js (пересоздаются после innerHTML-перезаписи;
-  // уничтожение прежних инстансов выполняет сам renderChart, см. charts.js)
-  previewEl.querySelectorAll("[id^='chart-']").forEach((el) => {
-    const code = decodeURIComponent(el.dataset.chartCode || "");
-    if (code) {
-      const w = diagramTargetWidth(el);
-      el.setAttribute("data-mdv-width", String(w));
-      el.style.width = w + "px";
-      el.style.maxWidth = "none";
-      el.style.height = Math.round(w * 5 / 8) + "px";
-      renderChart(code, el.id);
-    }
-  });
-
-  // Рендерим диаграммы nomnoml: неизменённые восстанавливаем из кэша SVG
-  previewEl.querySelectorAll(".nomnoml-diagram").forEach((el) => {
-    const code = decodeURIComponent(el.dataset.nomnomlCode || "");
-    if (!code) return;
-    const key = makeDiagramSignature("nomnoml", code, true);
-    const cached = svgCacheGet(key);
-    if (cached !== undefined) {
-      el.innerHTML = cached;
-      scaleDiagramSvg(el);
+  } else {
+    const range = changedRange(liveBlocks, nextRaws);
+    if (range.start === range.prevEnd && range.start === range.nextEnd) {
+      syncScroll.settling = false;
       return;
     }
-    if (typeof window.renderNomnoml === "function") {
-      try {
-        window.renderNomnoml(el, code);
-        if (el.innerHTML.indexOf("<svg") !== -1) {
-          svgCachePut(key, el.innerHTML);
-          scaleDiagramSvg(el);
-        }
-      } catch (e) {
-        el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
-      }
+    const anchor = measureAnchor(liveBlocks.map((b) => b.el), previewEl);
+    const anchorSurvives = anchor.index < range.start || anchor.index >= range.prevEnd;
+    if (anchorSurvives && liveBlocks[anchor.index]) {
+      pinEl = liveBlocks[anchor.index].el;
+      pinOffset = anchor.offset;
     }
-  });
+    const after = range.prevEnd < liveBlocks.length ? liveBlocks[range.prevEnd].el : null;
+    for (let i = range.prevEnd - 1; i >= range.start; i--) {
+      destroyCharts(liveBlocks[i].el);
+      liveBlocks[i].el.remove();
+    }
+    const created = [];
+    for (let i = range.start; i < range.nextEnd; i++) {
+      const el = renderBlockElement(next[i], links);
+      column.insertBefore(el, after);
+      created.push({ raw: next[i].raw, el });
+    }
+    if (!pinEl && created.length) {
+      const repl = anchor.index - range.start;
+      pinEl = (created[repl] || created[0]).el;
+      pinOffset = anchor.offset;
+    }
+    liveBlocks = liveBlocks.slice(0, range.start).concat(created, liveBlocks.slice(range.prevEnd));
+    freshRoots = created.map((b) => b.el);
+  }
 
-  // Стабилизация: после mermaid.run и двух кадров раскладки (canvas графиков,
-  // layout) возвращаем якорный блок точно на место и снимаем заморозку.
-  // Токен settleId: применяется только самая последняя перестройка.
-  mermaidDone.then(() => {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (settleId !== syncScrollSettle.id) return;
-      const kids = previewBlocks(previewEl);
-      if (kids.length && anchorIndex < kids.length) {
-        const contentTop = kids[anchorIndex].getBoundingClientRect().top
-          - previewEl.getBoundingClientRect().top + previewEl.scrollTop;
-        const desired = Math.max(0, contentTop - anchorOffset);
-        if (Math.abs(desired - previewEl.scrollTop) > 0.5) {
-          // Эхо этой установки погасится в обработчике (lock !== 'preview');
-          // если события не будет — подчистим lock следующим кадром
-          syncScroll.lock = "editor";
-          previewEl.scrollTop = desired;
-        }
-      }
-      syncScroll.settling = false;
-      requestAnimationFrame(() => {
-        if (syncScroll.lock === "editor") syncScroll.lock = null;
-      });
-    }));
-  });
+  if (pinEl) pinScroll(previewEl, pinEl, pinOffset);
+  drawDiagrams(freshRoots).then(() => finishPreviewSettle(settleId, previewEl, pinEl, pinOffset));
+}
 
-  bindPreviewLinks(previewEl, ".external-link", "open_external");
-  bindPreviewLinks(previewEl, ".app-link", "open_in_app_window");
-  bindTaskToggles(previewEl, content);
+// Запасной путь: весь документ одной обёрткой, без деления на блоки.
+function renderFallback(content) {
+  const wrap = document.createElement("div");
+  wrap.className = "mdv-block";
+  wrap.innerHTML = processImageSizes(marked.parse(content));
+  return wrap;
 }
 
 // Настройки размера по умолчанию применяются к уже открытому документу
@@ -512,16 +770,6 @@ window.refreshPreviewMedia = function () {
   lastPreviewContent = null;
   updatePreview(true);
 };
-
-function bindPreviewLinks(previewEl, selector, apiMethod) {
-  previewEl.querySelectorAll(selector).forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (el.dataset.url) window.callApi(apiMethod, el.dataset.url);
-    });
-  });
-}
 
 // Биндинг, вызывающий метод Python API (нативные диалоги файлов)
 function apiCommand(method) {
@@ -803,6 +1051,34 @@ function getEditorScrollEl() {
 // Подписка source-панели: при её прокрутке двигаем target-панель.
 // sourceEl — элемент, к которому привязан слушатель: scroll не всплывает,
 // событие придёт только от элемента, который реально прокрутил пользователь.
+// Несколько событий прокрутки за кадр считаем один раз.
+let syncJob = null;
+let syncFrame = 0;
+
+function runSyncJob() {
+  syncFrame = 0;
+  const job = syncJob;
+  syncJob = null;
+  if (!job || !syncScroll.enabled || syncScroll.settling) return;
+  const sourceEl = job.sourceEl;
+  const sourceName = job.sourceName;
+  const targetEl = sourceName === "editor" ? syncPreviewEl : getEditorScrollEl();
+  if (!targetEl || targetEl === sourceEl) return;
+  // «Эхо»: событие вызвано нашей же программной установкой scrollTop в другой панели
+  if (syncScroll.lock && syncScroll.lock !== sourceName) {
+    syncScroll.lock = null;
+    return;
+  }
+  const target = syncScrollTargetTop(sourceEl, targetEl);
+  if (target === null) return;
+  if (Math.abs(targetEl.scrollTop - target) < 1) return;
+  syncScroll.lock = sourceName;
+  targetEl.scrollTop = target;
+  requestAnimationFrame(() => {
+    if (syncScroll.lock === sourceName) syncScroll.lock = null;
+  });
+}
+
 function attachSyncScroll(sourceEl, sourceName) {
   if (!sourceEl) return;
   sourceEl.addEventListener("scroll", function () {
@@ -810,23 +1086,10 @@ function attachSyncScroll(sourceEl, sourceName) {
     // Заморозка на время перестройки превью (updatePreview): клампы и
     // служебные прокрутки не должны дёргать вторую панель
     if (syncScroll.settling) return;
-    const targetEl = sourceName === "editor" ? syncPreviewEl : getEditorScrollEl();
-    if (!targetEl || targetEl === sourceEl) return;
-    // «Эхо»: событие вызвано нашей же программной установкой scrollTop в другой панели
-    if (syncScroll.lock && syncScroll.lock !== sourceName) {
-      syncScroll.lock = null;
-      return;
-    }
-    const target = syncScrollTargetTop(sourceEl, targetEl);
-    if (target === null) return;
-    if (Math.abs(targetEl.scrollTop - target) < 1) return;
-    syncScroll.lock = sourceName;
-    targetEl.scrollTop = target;
-    // Снимаем блокировку после эхо-события (scroll-события приходят до rAF в этом же кадре)
-    requestAnimationFrame(() => {
-      if (syncScroll.lock === sourceName) syncScroll.lock = null;
-    });
-  });
+    syncJob = { sourceEl, sourceName };
+    if (syncFrame) return;
+    syncFrame = requestAnimationFrame(runSyncJob);
+  }, { passive: true });
 }
 
 attachSyncScroll(view.scrollDOM, "editor");

@@ -99,6 +99,41 @@ def _bundle_ok(snapshot):
     return True
 
 
+def _previous_draft(tab):
+    if not isinstance(tab, dict):
+        return None
+    draft = tab.get('draft')
+    if isinstance(draft, str):
+        return draft
+    content = tab.get('content')
+    if isinstance(content, str):
+        return content
+    return None
+
+
+def _fill_missing_drafts(snapshot):
+    """Курсор уходит на диск без текста. Черновик остаётся от прошлой записи."""
+    slot = state.active_slot()
+    previous = slot.last_snapshot if slot is not None else None
+    old_tabs = previous.get('tabs') if isinstance(previous, dict) else None
+    if not isinstance(old_tabs, list) or not isinstance(snapshot, dict):
+        return snapshot
+    for i, tab in enumerate(snapshot.get('tabs') or []):
+        if not isinstance(tab, dict) or not tab.get('dirty') or tab.get('html'):
+            continue
+        if isinstance(tab.get('content'), str) or isinstance(tab.get('draft'), str):
+            continue
+        if i >= len(old_tabs):
+            continue
+        old = old_tabs[i]
+        if isinstance(old, dict) and old.get('path') != tab.get('path'):
+            continue
+        draft = _previous_draft(old)
+        if isinstance(draft, str):
+            tab['content'] = draft
+    return snapshot
+
+
 def remember_session(snapshot=None, from_js=False):
     """Записать вкладки. Снимок из JS отвергается, если документ уже сменился."""
     if from_js:
@@ -110,6 +145,7 @@ def remember_session(snapshot=None, from_js=False):
             return
         if epoch != state.session_epoch:
             return
+        snapshot = _fill_missing_drafts(snapshot)
         if not _bundle_ok(snapshot):
             return
         dirty = _bundle_dirty(snapshot)
