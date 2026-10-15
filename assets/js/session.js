@@ -4,7 +4,19 @@
   var sessionEpoch = 0;
   var tracking = false;
   var paused = false;
-  var timer = null;
+  var textTimer = null;
+  var placeTimer = null;
+
+  function clearSessionTimers() {
+    if (textTimer) {
+      clearTimeout(textTimer);
+      textTimer = null;
+    }
+    if (placeTimer) {
+      clearTimeout(placeTimer);
+      placeTimer = null;
+    }
+  }
   var restoreToken = 0;
   var applying = false;
 
@@ -81,28 +93,43 @@
     applyRatio(preview, syncScrollOn() ? place.scroll : place.previewScroll);
   }
 
-  window.readEditorPlace = function () {
+  // Текст документа копируем один раз на версию CodeMirror.
+  // Движение курсора документ не меняет, строка остаётся прежней.
+  var cachedDoc = null;
+  var cachedText = '';
+
+  function editorText() {
+    var view = window.__cmView;
+    var doc = view && view.state.doc;
+    if (!doc) return '';
+    if (doc !== cachedDoc) {
+      cachedText = doc.toString();
+      cachedDoc = doc;
+    }
+    return cachedText;
+  }
+
+  window.readEditorPlace = function (includeContent) {
     var view = window.__cmView;
     var anchor = 0;
     var head = 0;
-    var content = '';
     if (view) {
       var sel = view.state.selection.main;
       anchor = sel.anchor;
       head = sel.head;
-      content = view.state.doc.toString();
     }
     return {
       anchor: anchor,
       head: head,
       scroll: editorScrollRatio(),
       previewScroll: readRatio(document.getElementById('preview')),
-      content: content,
+      content: includeContent === false ? '' : editorText(),
     };
   };
 
-  window.captureSessionSnapshot = function () {
-    var place = window.readEditorPlace();
+  window.captureSessionSnapshot = function (includeContent) {
+    var withText = includeContent !== false;
+    var place = window.readEditorPlace(withText);
     var live = {
       epoch: sessionEpoch,
       anchor: place.anchor,
@@ -110,28 +137,23 @@
       scroll: place.scroll,
       previewScroll: place.previewScroll,
       dirty: !!(window.isDocumentDirty && window.isDocumentDirty()),
+      includeContent: withText,
       content: place.content,
     };
     if (window.collectSessionState) return window.collectSessionState(live);
-    if (!live.dirty) live.content = '';
+    if (!live.dirty || !withText) live.content = '';
     return live;
   };
 
   // Сбросить уже поставленный снимок: он снят до сохранения или смены документа.
   window.setSessionEpoch = function (epoch) {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
+    clearSessionTimers();
     if (typeof epoch === 'number' && !isNaN(epoch)) sessionEpoch = epoch;
   };
 
   window.pauseSessionPersistence = function (epoch) {
     paused = true;
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
+    clearSessionTimers();
     if (typeof epoch === 'number' && !isNaN(epoch)) sessionEpoch = epoch;
   };
 
@@ -145,24 +167,18 @@
 
   window.disableSessionTracking = function () {
     tracking = false;
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
+    clearSessionTimers();
   };
 
   function keepSession() {
     return !!(window.sessionHasDocuments && window.sessionHasDocuments());
   }
 
-  function sessionSnapshotForDisk() {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
+  function sessionSnapshotForDisk(includeContent) {
+    clearSessionTimers();
     var canFlush = !paused && (keepSession() || (tracking && !window.__htmlMode && layoutReady()));
     if (!canFlush || (!window.__htmlMode && !layoutReady())) return null;
-    return window.captureSessionSnapshot();
+    return window.captureSessionSnapshot(includeContent !== false);
   }
 
   // Python вызывает это при закрытии окна и ждёт уже готовый снимок
@@ -170,27 +186,44 @@
     return sessionSnapshotForDisk();
   };
 
-  function flushSession() {
-    var snapshot = sessionSnapshotForDisk();
+  function flushSession(includeContent) {
+    var snapshot = sessionSnapshotForDisk(includeContent);
     if (snapshot) callApi('save_session', snapshot);
   }
 
-  function scheduleSessionSave() {
+  // Текст — вскоре после правки. Курсор и прокрутка — реже и без копии текста:
+  // Python оставляет уже записанный черновик.
+  function scheduleSessionSave(kind) {
     if (paused) return;
     if (!keepSession() && (!tracking || window.__htmlMode)) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(function () {
-      timer = null;
-      flushSession();
-    }, 200);
+    if (kind === 'text') {
+      if (placeTimer) {
+        clearTimeout(placeTimer);
+        placeTimer = null;
+      }
+      if (textTimer) clearTimeout(textTimer);
+      textTimer = setTimeout(function () {
+        textTimer = null;
+        flushSession(true);
+      }, 200);
+      return;
+    }
+    if (textTimer) return;
+    if (placeTimer) clearTimeout(placeTimer);
+    placeTimer = setTimeout(function () {
+      placeTimer = null;
+      flushSession(false);
+    }, 1000);
   }
 
-  window.scheduleSessionSave = scheduleSessionSave;
+  window.scheduleSessionSave = function () {
+    scheduleSessionSave('text');
+  };
 
   var prevCursor = window.updateStatusBarCursor;
   window.updateStatusBarCursor = function (line, col) {
     if (prevCursor) prevCursor(line, col);
-    scheduleSessionSave();
+    scheduleSessionSave('place');
   };
 
   var prevUnsaved = window.markUnsaved;
@@ -198,14 +231,14 @@
     if (window.__suppressDirty) return;
     if (prevUnsaved) prevUnsaved();
     if (!paused) tracking = true;
-    scheduleSessionSave();
+    scheduleSessionSave('text');
   };
 
   var editorEl = document.getElementById('editor');
   var previewEl = document.getElementById('preview');
 
   function onScroll() {
-    scheduleSessionSave();
+    scheduleSessionSave('place');
   }
 
   if (editorEl) editorEl.addEventListener('scroll', onScroll, { passive: true });
@@ -278,11 +311,8 @@
   };
 
   window.addEventListener('beforeunload', function () {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    flushSession();
+    clearSessionTimers();
+    flushSession(true);
   });
 
   // Сначала записать сессию, потом закрыть окно. Иначе последний курсор

@@ -235,7 +235,7 @@ def save_session(record, path=None):
     normalized = normalize(record)
     if normalized is None:
         return
-    payload = json.dumps(normalized, ensure_ascii=False, indent=2) + '\n'
+    payload = json.dumps(normalized, ensure_ascii=False, separators=(',', ':')) + '\n'
     path = SESSION_PATH if path is None else path
     global _last_written
     with _lock:
