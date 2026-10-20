@@ -14,13 +14,20 @@
   --hr-border: #333;
   --link-color: #4c9aff;
   --strong-color: #e1e1e1;
+  /* Подсветка кода — тема GitHub. Редактор читает те же переменные. */
   --hl-keyword: #ff7b72;
+  --hl-literal: #79c0ff;
   --hl-title: #d2a8ff;
+  --hl-builtin: #d2a8ff;
+  --hl-type: #d2a8ff;
   --hl-number: #79c0ff;
   --hl-string: #a5d6ff;
-  --hl-builtin: #ffa657;
   --hl-comment: #8b949e;
   --hl-tag: #7ee787;
+  --hl-variable: var(--fg);
+  --hl-attr: #79c0ff;
+  --hl-meta: #79c0ff;
+  --hl-invalid: #ff7b72;
   --hl-bullet: #f2cc60;
 }
 
@@ -40,12 +47,18 @@
   --link-color: #1a73e8;
   --strong-color: #1a1a1a;
   --hl-keyword: #d73a49;
+  --hl-literal: #005cc5;
   --hl-title: #6f42c1;
+  --hl-builtin: #6f42c1;
+  --hl-type: #6f42c1;
   --hl-number: #005cc5;
   --hl-string: #032f62;
-  --hl-builtin: #e36209;
   --hl-comment: #6a737d;
   --hl-tag: #22863a;
+  --hl-variable: var(--fg);
+  --hl-attr: #005cc5;
+  --hl-meta: #005cc5;
+  --hl-invalid: #d73a49;
   --hl-bullet: #735c0f;
 }
 
@@ -190,11 +203,16 @@
 #preview .hljs-meta,
 #preview .hljs-number,
 #preview .hljs-operator,
+#preview .hljs-property,
 #preview .hljs-selector-attr,
 #preview .hljs-selector-class,
-#preview .hljs-selector-id,
-#preview .hljs-variable {
+#preview .hljs-selector-id {
   color: var(--hl-number);
+}
+
+#preview .hljs-variable,
+#preview .hljs-params {
+  color: var(--hl-variable);
 }
 
 #preview .hljs-regexp,

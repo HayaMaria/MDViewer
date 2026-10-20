@@ -1,12 +1,13 @@
 import { EditorView, basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
 import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
 import { indentUnit } from "@codemirror/language";
 import { defaultKeymap, historyKeymap, undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import { applyChartTheme, renderChart } from "./charts.js";
+import { builtinHighlight, codeHighlighting } from "./code-highlight.js";
 import { highlightCodeBlock } from "./highlight.js";
 import { editorCodeLanguage } from "./code-languages.js";
 import { bindSpellcheck, pasteClipboard, spellCompartment, spellcheckOff } from "./spellcheck.js";
@@ -934,7 +935,9 @@ const editorExtensions = [
   // Своя проверка. Иначе WebView2 добавляет в меню свои варианты поверх наших.
   EditorView.contentAttributes.of({ spellcheck: "false" }),
   markdown({ codeLanguages: editorCodeLanguage }),
-  oneDark,
+  oneDarkTheme,
+  codeHighlighting,
+  builtinHighlight,
   keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
   searchHighlightExt,
   readOnlyCompartment.of(EditorState.readOnly.of(false)),

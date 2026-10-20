@@ -136,6 +136,7 @@ body {
 #editor .cm-editor {
   height: 100%;
   outline: none;
+  color: var(--fg);
 }
 #editor .cm-scroller {
   height: 100% !important;
@@ -145,7 +146,6 @@ body {
 /* CodeMirror — светлая тема */
 [data-theme="light"] .cm-editor {
   background: #fafafa;
-  color: #1e1e1e;
 }
 
 /* Подсветка — отдельным слоем под выделением: у .cm-selectionLayer z-index: -2,
@@ -653,102 +653,43 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; }
   border: 1px solid #ddd;
 }
 
-/* Стили синтаксиса CodeMirror для светлой темы */
-[data-theme="light"] .cm-editor .cm-comment {
-  color: #008000;
-}
+/* Подсветка кода — те же --hl-*, что у превью. Знаки разметки только в редакторе. */
+#editor .cm-editor .tok-keyword { color: var(--hl-keyword); }
+#editor .cm-editor .tok-literal { color: var(--hl-literal); }
+#editor .cm-editor .tok-string { color: var(--hl-string); }
+#editor .cm-editor .tok-number { color: var(--hl-number); }
+#editor .cm-editor .tok-title { color: var(--hl-title); }
+#editor .cm-editor .tok-type { color: var(--hl-type); }
+#editor .cm-editor .tok-comment { color: var(--hl-comment); }
+#editor .cm-editor .tok-tag { color: var(--hl-tag); }
+#editor .cm-editor .tok-variable { color: var(--hl-variable); }
+#editor .cm-editor .tok-attr { color: var(--hl-attr); }
+#editor .cm-editor .tok-meta { color: var(--hl-meta); }
+#editor .cm-editor .tok-invalid { color: var(--hl-invalid); }
+/* Оверлей поверх span подсветки: внутренний класс иначе перекрывает цвет. */
+#editor .cm-editor .tok-builtin,
+#editor .cm-editor .tok-builtin * { color: var(--hl-builtin); }
+#editor .cm-editor .tok-as-keyword,
+#editor .cm-editor .tok-as-keyword * { color: var(--hl-keyword); }
+#editor .cm-editor .tok-as-number,
+#editor .cm-editor .tok-as-number * { color: var(--hl-number); }
+#editor .cm-editor .tok-as-tag,
+#editor .cm-editor .tok-as-tag * { color: var(--hl-tag); }
 
-[data-theme="light"] .cm-editor .cm-keyword {
-  color: #00f;
+#editor .cm-editor .tok-heading {
+  color: var(--heading);
+  font-weight: 700;
 }
-
-[data-theme="light"] .cm-editor .cm-string {
-  color: #a31515;
+#editor .cm-editor .tok-link {
+  color: var(--link-color);
+  text-decoration: underline;
 }
-
-[data-theme="light"] .cm-editor .cm-number {
-  color: #098658;
-}
-
-[data-theme="light"] .cm-editor .cm-def {
-  color: #001080;
-}
-
-[data-theme="light"] .cm-editor .cm-operator {
-  color: #000;
-}
-
-[data-theme="light"] .cm-editor .cm-atom {
-  color: #098658;
-}
-
-[data-theme="light"] .cm-editor .cm-meta {
-  color: #800000;
-}
-
-[data-theme="light"] .cm-editor .cm-variable {
-  color: #001080;
-}
-
-[data-theme="light"] .cm-editor .cm-variable-2 {
-  color: #001080;
-}
-
-[data-theme="light"] .cm-editor .cm-variable-3 {
-  color: #001080;
-}
-
-[data-theme="light"] .cm-editor .cm-type {
-  color: #267f99;
-}
-
-[data-theme="light"] .cm-editor .cm-builtin {
-  color: #795e26;
-}
-
-[data-theme="light"] .cm-editor .cm-tag {
-  color: #800000;
-}
-
-[data-theme="light"] .cm-editor .cm-attribute {
-  color: #e06c75;
-}
-
-[data-theme="light"] .cm-editor .cm-quote {
-  color: #1e1e1e;
-}
-
-[data-theme="light"] .cm-editor .cm-bracket {
-  color: #1e1e1e;
-}
-
-[data-theme="light"] .cm-editor .cm-hr {
-  color: #1e1e1e;
-}
-
-[data-theme="light"] .cm-editor .cm-link {
-  color: #1a73e8;
-}
-
-[data-theme="light"] .cm-editor .cm-url {
-  color: #1a73e8;
-}
-
-[data-theme="light"] .cm-editor .cm-formatting {
-  color: #1e1e1e;
-}
-
-[data-theme="light"] .cm-editor .cm-strikethrough {
-  color: #888;
-}
-
-[data-theme="light"] .cm-editor .cm-em {
-  font-style: italic;
-}
-
-[data-theme="light"] .cm-editor .cm-strong {
-  font-weight: bold;
-}
+#editor .cm-editor .tok-em { font-style: italic; }
+#editor .cm-editor .tok-strong { font-weight: 700; }
+#editor .cm-editor .tok-strike { text-decoration: line-through; }
+#editor .cm-editor .tok-quote { color: var(--blockquote-color); }
+#editor .cm-editor .tok-mark { color: #808080; }
+[data-theme="light"] #editor .cm-editor .tok-mark { color: #888; }
 
 /* Ссылки превью: открываются через Python (в браузере или в окне приложения) */
 #preview .external-link,
