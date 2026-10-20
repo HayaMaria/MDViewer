@@ -10,6 +10,8 @@ from mdviewer.state import state
 from mdviewer.win.associate import get_startup_file_path, register_file_associations
 from mdviewer.drag_ghost import prewarm
 from mdviewer.filedrop import enable as enable_file_drop
+from mdviewer.win.clipboard import allow_page_read
+from mdviewer.win.contextmenu import configure as configure_context_menu
 from mdviewer.windows import create_editor_window, loaded_callbacks
 
 
@@ -112,6 +114,8 @@ def main():
     loaded_callbacks.append(_keep_ctrl_u_for_editor)
     loaded_callbacks.append(prewarm)
     loaded_callbacks.append(enable_file_drop)
+    loaded_callbacks.append(configure_context_menu)
+    loaded_callbacks.append(allow_page_read)
     slot = create_editor_window()
     slot.startup_file = get_startup_file_path()
     webview.start(debug=True)

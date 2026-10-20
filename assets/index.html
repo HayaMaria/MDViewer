@@ -270,6 +270,17 @@
             <button class="btn btn-secondary" onclick="pickMDFolder()">Обзор...</button>
           </div>
         </div>
+        <div class="spellcheck-block">
+          <label class="field-label">Орфография</label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-spellcheck-enabled" checked>
+            Проверять орфографию
+          </label>
+          <div class="spell-dict">
+            <p id="settings-spell-count" class="spell-dict-empty">Пока пусто. Слова добавляются из меню в редакторе.</p>
+            <button type="button" class="btn btn-secondary" id="settings-spell-open">Открыть словарь</button>
+          </div>
+        </div>
         <div class="autosave-block">
           <label class="field-label">Автосохранение</label>
           <label class="checkbox-row">
@@ -319,6 +330,30 @@
       <div class="modal-footer">
         <button class="btn" onclick="cancelSettings()">Отмена</button>
         <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="spell-dict-overlay" class="modal-overlay">
+    <div class="modal spell-dict-modal">
+      <div class="modal-header">
+        <span>Свой словарь</span>
+        <button class="modal-close" onclick="closeSpellDictionary()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="spell-dict-tools">
+          <input type="text" id="spell-dict-search" class="input" placeholder="Поиск" autocomplete="off">
+          <select id="spell-dict-sort" class="input">
+            <option value="alpha">По алфавиту</option>
+            <option value="date-desc">Сначала новые</option>
+            <option value="date-asc">Сначала старые</option>
+          </select>
+        </div>
+        <p id="spell-dict-empty" class="spell-dict-empty" hidden>Пока пусто. Слова добавляются из меню в редакторе.</p>
+        <ul id="spell-dict-list" class="spell-dict-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeSpellDictionary()">Закрыть</button>
       </div>
     </div>
   </div>

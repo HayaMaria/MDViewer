@@ -187,6 +187,20 @@ class Api:
         saved = config.autosave_settings()
         autosave.configure(saved['enabled'], saved['interval'])
 
+    def add_user_word(self, word):
+        """Слово из меню редактора. Возвращает весь свой словарь."""
+        return config.add_user_word(word)
+
+    def start_voice_typing(self):
+        """Голосовой ввод из меню редактора."""
+        from .win.contextmenu import start_voice_typing
+        start_voice_typing()
+
+    def read_clipboard(self):
+        """Текст буфера. Браузер на это показывает запрос разрешения."""
+        from .win.clipboard import read_text
+        return read_text()
+
     def configure_autosave(self, enabled, interval):
         autosave.configure(enabled, interval)
 
@@ -376,6 +390,8 @@ class Api:
 
     def apply_titlebar_theme(self, dark):
         set_titlebar_theme(state.window, dark)
+        from .win.contextmenu import configure
+        configure(bool(dark))
 
     def open_external(self, url):
         webbrowser.open(url)
