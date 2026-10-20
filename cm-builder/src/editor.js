@@ -9,6 +9,7 @@ import { marked } from "marked";
 import { applyChartTheme, renderChart } from "./charts.js";
 import { highlightCodeBlock } from "./highlight.js";
 import { editorCodeLanguage } from "./code-languages.js";
+import { bindSpellcheck, pasteClipboard, spellCompartment, spellcheckOff } from "./spellcheck.js";
 import mermaidThemes from "../../assets/mermaid-themes.json";
 
 // Mermaid и Chart.js не входят в бандл редактора: их файлы подключаются,
@@ -930,11 +931,14 @@ const editorExtensions = [
   // Настоящий перенос: курсор, клик и выделение идут по видимым рядам.
   // В документ разрыв не записывается.
   EditorView.lineWrapping,
+  // Своя проверка. Иначе WebView2 добавляет в меню свои варианты поверх наших.
+  EditorView.contentAttributes.of({ spellcheck: "false" }),
   markdown({ codeLanguages: editorCodeLanguage }),
   oneDark,
   keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
   searchHighlightExt,
   readOnlyCompartment.of(EditorState.readOnly.of(false)),
+  spellCompartment.of(spellcheckOff),
   EditorView.updateListener.of((update) => {
     if (update.docChanged) {
       // Превью перестраиваем с задержкой (debounce) — иначе на документах со
@@ -962,6 +966,7 @@ const view = new EditorView({
 
 // Экспортируем view для внешнего доступа (нужно для принудительного пересчёта размеров)
 window.__cmView = view;
+bindSpellcheck(view);
 
 // ===== Размер шрифта редактора (при запуске и из диалога «Настройки») =====
 window.setEditorFontSize = function (size) {
@@ -978,6 +983,7 @@ function reapplyEditorFontSize() {
 
 function finishDocumentSwap() {
   reapplyEditorFontSize();
+  if (window.reapplySpellcheck) window.reapplySpellcheck();
   updatePreview();
   syncHistoryButtons(view.state);
   document.dispatchEvent(new CustomEvent("mdv-document-replaced"));
@@ -1164,16 +1170,7 @@ window.copyText = () => {
 };
 
 // Вставить текст из буфера обмена
-window.pasteText = () => {
-  view.focus();
-  navigator.clipboard.readText().then(text => {
-    const sel = view.state.selection.main;
-    view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert: text },
-      selection: { anchor: sel.from + text.length }
-    });
-  }).catch(() => { });
-};
+window.pasteText = () => pasteClipboard(view);
 
 // ===== Кастомный поиск (панель в тулбаре, как в VS Code) =====
 

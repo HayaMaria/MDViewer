@@ -11,6 +11,11 @@ onApiReady(function () {
     window.applyColumnWidth(s.column_width);
     window.applyMediaSizeDefaults(s.media_sizes);
     window.applyAutosaveSettings(s.autosave);
+    if (window.setSpellUserWords) window.setSpellUserWords(s.user_words || []);
+    if (window.setSpellcheckEnabled) {
+      var spellOn = !s.spellcheck || !!s.spellcheck.enabled;
+      window.setSpellcheckEnabled(spellOn);
+    }
   });
 
   callApi('window_id').then(function (id) {

@@ -1,9 +1,17 @@
 """Настройки пользователя: %APPDATA%/MDViewer/config.json."""
 import json
 import os
+import re
+import threading
+from datetime import datetime
 
 CONFIG_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'MDViewer')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
+USER_DICT_PATH = os.path.join(CONFIG_DIR, 'user-dictionary.txt')
+_user_dict_lock = threading.Lock()
+# Буквы, внутри слова — дефис или апостроф. Цифры и подчёркивание не принимаем.
+_USER_WORD_RE = re.compile(r"^[^\W\d_](?:[^\W\d_]|['’-](?=[^\W\d_])){0,63}$", re.UNICODE)
+_ADDED_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$')
 
 DEFAULTS = {
     'theme': 'dark',
@@ -121,6 +129,99 @@ def autosave_settings(config=None):
     }
 
 
+def spellcheck_settings(config=None):
+    """Включена ли проверка орфографии. По умолчанию да."""
+    config = load_config() if config is None else config
+    saved = config.get('spellcheck') or {}
+    return {'enabled': bool(saved.get('enabled', True))}
+
+
+def _added_stamp():
+    return datetime.now().isoformat(timespec='seconds')
+
+
+def _entry_from_parts(word, added):
+    word = str(word).strip()
+    added = str(added or '').strip()
+    if not _USER_WORD_RE.fullmatch(word):
+        return None
+    if not _ADDED_RE.fullmatch(added):
+        added = ''
+    return {'word': word, 'added': added}
+
+
+def _clean_user_entries(words):
+    """Уникальные записи без сортировки: порядок в файле — порядок добавления."""
+    seen = set()
+    cleaned = []
+    for raw in words or []:
+        if isinstance(raw, dict):
+            entry = _entry_from_parts(raw.get('word', ''), raw.get('added', ''))
+        else:
+            text = str(raw).strip()
+            if '\t' in text:
+                word, _, added = text.partition('\t')
+            else:
+                word, added = text, ''
+            entry = _entry_from_parts(word, added)
+        if entry is None:
+            continue
+        key = entry['word'].casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(entry)
+    return cleaned
+
+
+def _read_user_entries():
+    """Читать под замком. Старые файлы — слово на строке, без даты."""
+    try:
+        with open(USER_DICT_PATH, 'r', encoding='utf-8') as handle:
+            lines = handle.read().splitlines()
+    except (FileNotFoundError, OSError):
+        return []
+    return _clean_user_entries(lines)
+
+
+def _write_user_entries(entries):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(USER_DICT_PATH, 'w', encoding='utf-8', newline='\n') as handle:
+        for entry in entries:
+            line = entry['word']
+            if entry.get('added'):
+                line += '\t' + entry['added']
+            handle.write(line)
+            handle.write('\n')
+
+
+def user_dictionary():
+    """Слова, которые пользователь добавил сам. Файл может отсутствовать."""
+    with _user_dict_lock:
+        return _read_user_entries()
+
+
+def save_user_dictionary(words):
+    """Записать свой словарь целиком. Возвращает то, что реально легло в файл."""
+    cleaned = _clean_user_entries(words)
+    with _user_dict_lock:
+        _write_user_entries(cleaned)
+    return cleaned
+
+
+def add_user_word(word):
+    """Дописать слово к своему словарю и вернуть полный список."""
+    with _user_dict_lock:
+        entries = _read_user_entries()
+        fresh = _entry_from_parts(word, _added_stamp())
+        if fresh is not None:
+            key = fresh['word'].casefold()
+            if not any(item['word'].casefold() == key for item in entries):
+                entries.append(fresh)
+        _write_user_entries(entries)
+    return entries
+
+
 def ui_settings():
     """Все настройки, нужные интерфейсу, одним словарём."""
     config = load_config()
@@ -139,6 +240,8 @@ def ui_settings():
         'autosave_intervals': [
             {'value': seconds, 'label': label} for seconds, label in AUTOSAVE_INTERVALS
         ],
+        'spellcheck': spellcheck_settings(config),
+        'user_words': user_dictionary(),
     }
 
 
@@ -159,4 +262,9 @@ def save_ui_settings(settings):
         'enabled': bool(incoming_autosave.get('enabled', False)),
         'interval': _clamp_autosave_interval(incoming_autosave.get('interval')),
     }
+    if 'spellcheck' in settings:
+        incoming_spell = settings.get('spellcheck') or {}
+        config['spellcheck'] = {'enabled': bool(incoming_spell.get('enabled', False))}
     save_config(config)
+    if 'user_words' in settings:
+        save_user_dictionary(settings.get('user_words') or [])
