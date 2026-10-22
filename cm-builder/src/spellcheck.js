@@ -2,10 +2,12 @@
 // Словари лежат отдельно (assets/dicts) и читаются, только когда проверка включена.
 import { EditorView, Decoration, ViewPlugin, keymap } from "@codemirror/view";
 import { Compartment, RangeSetBuilder, StateEffect } from "@codemirror/state";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import nspell from "nspell";
 
 const CHECK_DELAY_MS = 300;
+// Правка короче этого перечитывается сразу, не дожидаясь таймера.
+const IMMEDIATE_CHECK_LIMIT = 4000;
 const SUGGEST_LIMIT = 6;
 // Ниже этого сходства вариант — чужое короткое слово из словаря, а не исправление.
 const SUGGEST_MIN_RATIO = 0.7;
@@ -458,10 +460,39 @@ function mapRange(range, changes) {
   };
 }
 
+const WORD_EDGE = /[\p{Script=Cyrillic}\p{Script=Latin}]/u;
+
+// Буква сразу за краем пометки: слово выросло, старая черта короче текста.
+function grewAround(state, from, to) {
+  const doc = state.doc;
+  const before = from > 0 ? doc.sliceString(from - 1, from) : "";
+  const after = to < doc.length ? doc.sliceString(to, to + 1) : "";
+  return WORD_EDGE.test(before) || WORD_EDGE.test(after);
+}
+
+function misspellingsIn(state, ranges) {
+  const found = [];
+  for (const range of ranges) {
+    for (const item of wordsInRange(state, range.from, range.to)) {
+      if (!isCorrect(item.word)) found.push(item);
+    }
+  }
+  return found;
+}
+
+// Новая пометка заменяет старую, если они лежат на одном месте.
+function replaceOverlapping(marks, found) {
+  const next = marks.filter((mark) => !found.some((item) => item.from < mark.to && item.to > mark.from));
+  next.push(...found);
+  next.sort((a, b) => a.from - b.from || a.to - b.to);
+  return next;
+}
+
 function marksToDeco(marks) {
+  const sorted = [...marks].sort((a, b) => a.from - b.from || b.to - a.to);
   const builder = new RangeSetBuilder();
   let cursor = 0;
-  for (const mark of marks) {
+  for (const mark of sorted) {
     if (mark.from < cursor || mark.from >= mark.to) continue;
     builder.add(mark.from, mark.to, spellMark);
     cursor = mark.to;
@@ -752,6 +783,7 @@ const spellPlugin = ViewPlugin.fromClass(class {
     this.timer = 0;
     this.generation = 0;
     this.waitingForTree = false;
+    this.treeWaits = 0;
     this.dead = false;
     this.onScroll = () => hideMenu();
     view.scrollDOM.addEventListener("scroll", this.onScroll, { passive: true });
@@ -768,8 +800,17 @@ const spellPlugin = ViewPlugin.fromClass(class {
     this.timer = setTimeout(() => this.scan(generation), CHECK_DELAY_MS);
   }
 
+  retryScan(generation, delay) {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.scan(generation), delay);
+  }
+
   scan(generation) {
-    if (this.dead || generation !== this.generation || !checkersReady()) return;
+    if (this.dead || generation !== this.generation) return;
+    if (!checkersReady()) {
+      this.retryScan(generation, CHECK_DELAY_MS);
+      return;
+    }
     const state = this.view.state;
     const docLength = state.doc.length;
     const ranges = mergeRanges(this.dirty.map((range) => ({
@@ -778,19 +819,19 @@ const spellPlugin = ViewPlugin.fromClass(class {
     })));
     if (!ranges.length) {
       this.dirty = [];
+      this.treeWaits = 0;
       return;
     }
-    if (!ensureSyntaxTree(state, ranges[ranges.length - 1].to, 80)) {
+    const covered = syntaxTreeAvailable(state, ranges[ranges.length - 1].to);
+    if (!covered && this.treeWaits < 20) {
       this.waitingForTree = true;
+      this.treeWaits += 1;
+      this.retryScan(generation, 80);
       return;
     }
     this.waitingForTree = false;
-    const found = [];
-    for (const range of ranges) {
-      for (const item of wordsInRange(state, range.from, range.to)) {
-        if (!isCorrect(item.word)) found.push(item);
-      }
-    }
+    this.treeWaits = 0;
+    const found = misspellingsIn(state, ranges);
     if (this.dead || generation !== this.generation) return;
     this.view.dispatch({
       effects: spellResult.of({ generation, ranges, found }),
@@ -808,15 +849,25 @@ const spellPlugin = ViewPlugin.fromClass(class {
       update.changes.iterChanges((fromA, toA, fromB, toB) => {
         this.dirty.push(expandLines(update.state, fromB, toB));
       });
-      // Уже найденные ошибки остаются, пока проверка не вернётся.
-      // Снимаем только ту пометку, чей текст реально изменился.
+      // Чужое слово не трогаем. Своё снимаем, если буквы уже другие
+      // или слово выросло за край старой черты.
       this.marks = this.marks.flatMap((mark) => {
         const from = update.changes.mapPos(mark.from, 1);
         const to = update.changes.mapPos(mark.to, -1);
         if (from >= to) return [];
         if (update.state.doc.sliceString(from, to) !== mark.word) return [];
+        if (grewAround(update.state, from, to)) return [];
         return [{ from, to, word: mark.word }];
       });
+      const docLength = update.state.doc.length;
+      const ranges = mergeRanges(this.dirty.map((range) => ({
+        from: Math.max(0, Math.min(range.from, docLength)),
+        to: Math.max(0, Math.min(range.to, docLength)),
+      })));
+      const width = ranges.reduce((sum, range) => sum + (range.to - range.from), 0);
+      if (width > 0 && width <= IMMEDIATE_CHECK_LIMIT && checkersReady()) {
+        this.marks = replaceOverlapping(this.marks, misspellingsIn(update.state, ranges));
+      }
       this.marks.sort((a, b) => a.from - b.from || a.to - b.to);
       this.decorations = marksToDeco(this.marks);
       this.schedule();
