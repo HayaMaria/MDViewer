@@ -1032,7 +1032,7 @@ body.splitter-drag iframe {
   cursor: pointer;
 }
 
-/* Динамические блоки: столбец таблицы, ряд графика */
+/* Динамические блоки: столбец или строка таблицы, ряд графика */
 .data-block {
   padding: 6px;
   border: 1px solid var(--border);
@@ -1056,9 +1056,36 @@ body.splitter-drag iframe {
   gap: 8px;
 }
 
-#table-columns-list {
-  max-height: 220px;
-  overflow-y: auto;
+/* Окно открывается у верхнего края, поэтому высота не должна уходить за экран.
+   Лишняя часть прокручивается внутри блока данных; шапка и кнопки остаются на месте. */
+#table-config-overlay .modal {
+  max-height: calc(100vh - 52px);
+}
+
+#table-config-overlay .modal-header,
+#table-config-overlay .modal-footer,
+#table-config-overlay .modal-body,
+#table-config-overlay #table-data-msg {
+  flex-shrink: 0;
+}
+
+#table-config-overlay .modal-body {
+  padding: 10px 16px;
+  gap: 8px;
+}
+
+#table-config-overlay .modal-body.row {
+  flex-direction: row;
+  align-items: center;
+}
+
+#table-config-overlay #table-data-mode {
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+#table-data-preview {
+  max-height: 4.5em;
 }
 
 #chart-body {

@@ -437,16 +437,32 @@
           <input type="checkbox" id="table-header-row">
           <b>Первая строка — заголовки</b>
         </label>
-        <div id="table-columns-list" class="data-list"></div>
         <div>
-          <button class="btn btn-secondary btn-small" onclick="addTableColumn()">+ Добавить столбец</button>
+          <label class="field-label">Заполнение</label>
+          <div class="row">
+            <label><input type="radio" name="table-fill" value="columns" checked onclick="switchTableFill()"> По столбцам</label>
+            <label><input type="radio" name="table-fill" value="rows" onclick="switchTableFill()"> По строкам</label>
+          </div>
+          <div class="hint" id="table-fill-hint">Каждое поле — один столбец. Значения идут сверху вниз.</div>
+        </div>
+        <div id="table-columns-pane">
+          <div id="table-columns-list" class="data-list"></div>
+          <div>
+            <button class="btn btn-secondary btn-small" onclick="addTableColumn()">+ Добавить столбец</button>
+          </div>
+        </div>
+        <div id="table-rows-pane" style="display:none">
+          <div id="table-rows-list" class="data-list"></div>
+          <div>
+            <button class="btn btn-secondary btn-small" onclick="addTableRow()">+ Добавить строку</button>
+          </div>
         </div>
         <div>
           <label class="field-label">Предпросмотр</label>
-          <textarea id="table-data-preview" rows="4" class="input input-mono input-code" readonly></textarea>
+          <textarea id="table-data-preview" rows="3" class="input input-mono input-code" readonly></textarea>
         </div>
       </div>
-      <div id="table-data-msg" class="hint" style="display:none;padding:10px 16px;text-align:center">Вставьте данные в поля колонок</div>
+      <div id="table-data-msg" class="hint" style="display:none;padding:10px 16px;text-align:center">Вставьте данные в поля столбцов</div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal('table-config-overlay')">Отмена</button>
         <button class="btn btn-primary" onclick="runInsertTable()">Вставить</button>
