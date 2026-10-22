@@ -6,7 +6,7 @@ import uuid
 
 import webview
 
-from . import APP_TITLE, UNTITLED, config, session
+from . import APP_TITLE, UNTITLED, config, durable, session
 from .htmlfile import inject_fit_width_style, prepare_html_for_preview, read_html_text
 from .state import alert, bind_slot, call_js, state, unbind_slot
 
@@ -17,6 +17,7 @@ OPEN_FILE_TYPES = ('All files (*.*)', 'Markdown files (*.md)', 'HTML files (*.ht
 SAVE_FILE_TYPES = ('Markdown files (*.md)', 'All files (*.*)')
 READ_ONLY_MESSAGE = 'HTML-файл открыт в режиме только для чтения — сохранение недоступно'
 _io_lock = threading.Lock()
+_publish_lock = threading.RLock()
 
 
 def _show_document_name(name):
@@ -136,6 +137,7 @@ def _fill_missing_drafts(snapshot):
 
 def remember_session(snapshot=None, from_js=False):
     """Записать вкладки. Снимок из JS отвергается, если документ уже сменился."""
+    epoch = None
     if from_js:
         if state.session_paused or not isinstance(snapshot, dict):
             return
@@ -145,33 +147,37 @@ def remember_session(snapshot=None, from_js=False):
             return
         if epoch != state.session_epoch:
             return
-        snapshot = _fill_missing_drafts(snapshot)
-        if not _bundle_ok(snapshot):
-            return
-        dirty = _bundle_dirty(snapshot)
-        if not state.persist_session and not dirty:
-            return
-        if dirty:
-            state.persist_session = True
     elif not state.persist_session:
         return
-    if not isinstance(snapshot, dict) or 'tabs' not in snapshot:
+    # Снимок редактора берём до замка: вызов JS из-под него может зайти сюда снова.
+    if not from_js and (not isinstance(snapshot, dict) or 'tabs' not in snapshot):
         snapshot = _capture_editor_session()
         if not _bundle_ok(snapshot):
             return
-    bundle = session.normalize_bundle(snapshot)
-    if bundle is None:
-        return
     slot = state.active_slot()
-    if slot is None:
-        session.save_session(bundle)
-        return
-    slot.last_snapshot = bundle
-    publish_sessions()
+    with _publish_lock:
+        if from_js:
+            # Пока снимок ждал очереди, вкладку могли закрыть или документ подменить.
+            if state.session_paused or epoch != state.session_epoch:
+                return
+            snapshot = _fill_missing_drafts(snapshot)
+            if not _bundle_ok(snapshot):
+                return
+            if _bundle_dirty(snapshot):
+                state.persist_session = True
+            elif not state.persist_session:
+                return
+        bundle = session.normalize_bundle(snapshot)
+        if bundle is None:
+            return
+        if slot is None:
+            session.save_session(bundle)
+            return
+        _commit_slot_snapshot(slot, bundle)
 
 
-def publish_sessions():
-    """Одна сессия на все окна: при следующем запуске открывается одно окно."""
+def _publish_locked():
+    """Собрать снимки всех окон и записать файл. Замок уже взят."""
     merged = session.merge_windows({
         'windows': [
             {'tabs': slot.last_snapshot['tabs'], 'active': slot.last_snapshot['active']}
@@ -185,13 +191,28 @@ def publish_sessions():
         session.clear_session()
 
 
+def _commit_slot_snapshot(slot, bundle):
+    """Подменить снимок окна и сразу записать общий файл.
+
+    Иначе два окна успевают записать файл по очереди, и второе затирает
+    черновик первого уже устаревшей копией.
+    """
+    with _publish_lock:
+        if slot is not None:
+            slot.last_snapshot = bundle
+        _publish_locked()
+
+
+def publish_sessions():
+    """Одна сессия на все окна: при следующем запуске открывается одно окно."""
+    with _publish_lock:
+        _publish_locked()
+
+
 def forget_window_session():
     """У этого окна больше нет вкладок, которые надо помнить."""
-    slot = state.active_slot()
-    if slot is not None:
-        slot.last_snapshot = None
     state.persist_session = False
-    publish_sessions()
+    _commit_slot_snapshot(state.active_slot(), None)
 
 
 def note_missing_session_file(data):
@@ -217,10 +238,7 @@ def show_welcome():
     state.current_file = None
     state.opened_path = None
     state.html_mode = False
-    slot = state.active_slot()
-    if slot is not None:
-        slot.last_snapshot = None
-    publish_sessions()
+    _commit_slot_snapshot(state.active_slot(), None)
     _show_document_name(UNTITLED)
     call_js('beginWelcomeDocument', state.session_epoch)
 
@@ -242,10 +260,7 @@ def bind_active(info):
     state.current_file = None if html else path
     state.persist_session = bool(info.get('persist'))
     if not state.persist_session:
-        slot = state.active_slot()
-        if slot is not None:
-            slot.last_snapshot = None
-        publish_sessions()
+        _commit_slot_snapshot(state.active_slot(), None)
     title = info.get('title')
     if not isinstance(title, str) or not title.strip():
         title = os.path.basename(path) if path else UNTITLED
@@ -451,18 +466,6 @@ def save():
     return bool(save_as(config.md_save_dir()))
 
 
-def autosave():
-    """Сохранить открытый файл без диалога. Новый документ и HTML пропускаются."""
-    if state.session_paused or state.html_mode or not state.current_file:
-        return False
-    try:
-        if call_js('autosaveAllowed') is False:
-            return False
-    except Exception:
-        return False
-    return _write_editor_content(state.current_file)
-
-
 def _suggested_save_name():
     """Имя в диалоге «Сохранить как»: файл вкладки или её заголовок.
 
@@ -532,8 +535,9 @@ def _write_editor_content(path, remember=True):
 def _write_editor_content_unlocked(path):
     content, revision = _editor_snapshot()
     try:
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        # Не открываем цель сразу на запись: это обрезает файл ещё до того,
+        # как новый текст дойдёт до диска.
+        durable.write_text(path, content, backup=False, newline=None)
     except OSError as e:
         alert(f'Ошибка сохранения: {e}')
         return False
@@ -650,8 +654,7 @@ def open_detached_window(spec, screen_x, screen_y):
             )
             bundle = _bundle_from_drag_spec(spec)
             if bundle is not None:
-                slot.last_snapshot = bundle
-                publish_sessions()
+                _commit_slot_snapshot(slot, bundle)
             job['status'] = 'ready'
         except Exception:
             job['status'] = 'error'

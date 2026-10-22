@@ -5,6 +5,8 @@ import re
 import threading
 from datetime import datetime
 
+from . import durable
+
 CONFIG_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'MDViewer')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 USER_DICT_PATH = os.path.join(CONFIG_DIR, 'user-dictionary.txt')
@@ -26,42 +28,36 @@ EXPORT_DEFAULTS = {
 }
 # Доступные ширины медиа (изображения, схемы, диаграммы, графики), в px
 MEDIA_SIZE_OPTIONS = tuple(range(200, 1001, 50))
+# 0 у таблицы — «По содержимому»: ширина не задана.
 MEDIA_SIZE_DEFAULTS = {
+    'table': 0,
     'image': 500,
     'mermaid': 600,
     'uml': 450,
     'chart': 600,
 }
-# Периодичность автосохранения, в секундах. 0 в настройках не хранится:
-# выключение — отдельный флаг enabled.
-AUTOSAVE_INTERVALS = (
-    (5, '5 секунд'),
-    (10, '10 секунд'),
-    (15, '15 секунд'),
-    (30, '30 секунд'),
-    (60, '1 минута'),
-    (120, '2 минуты'),
-    (300, '5 минут'),
-    (600, '10 минут'),
-)
-AUTOSAVE_DEFAULT_INTERVAL = 30
 # Ширина колонки просмотра и экспорта. Редактор этой мерой не ограничен.
 COLUMN_WIDTHS = ('reading', 'wide', 'full')
 COLUMN_WIDTH_DEFAULT = 'reading'
 
 
 def load_config():
-    try:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    status, raw = durable.parse_json(CONFIG_PATH)
+    if status == 'absent':
         return {}
+    if status == 'ok' and isinstance(raw, dict):
+        durable.note_good(CONFIG_PATH)
+        durable.ensure_backup(CONFIG_PATH)
+        return raw
+    _status, backup = durable.parse_json(CONFIG_PATH + '.bak')
+    if isinstance(backup, dict):
+        return backup
+    return {}
 
 
 def save_config(config):
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=2)
+    payload = json.dumps(config, indent=2)
+    durable.write_text(CONFIG_PATH, payload, backup=True, backup_interval=0, newline='\n')
 
 
 def set_value(key, value):
@@ -85,31 +81,24 @@ def md_save_dir():
     return path if os.path.isdir(path) else downloads_dir()
 
 
-def _clamp_media_size(value, fallback):
+def _clamp_media_size(key, value, fallback):
     try:
         size = int(value)
     except (TypeError, ValueError):
         return fallback
+    if key == 'table' and size == 0:
+        return 0
     return size if size in MEDIA_SIZE_OPTIONS else fallback
 
 
 def media_size_defaults(config=None):
-    """Ширины по умолчанию для изображений / Mermaid / UML / графиков."""
+    """Ширины по умолчанию для таблиц / изображений / Mermaid / UML / графиков."""
     config = load_config() if config is None else config
     saved = config.get('mediaSizes', {})
     return {
-        key: _clamp_media_size(saved.get(key), default)
+        key: _clamp_media_size(key, saved.get(key), default)
         for key, default in MEDIA_SIZE_DEFAULTS.items()
     }
-
-
-def _clamp_autosave_interval(value):
-    try:
-        seconds = int(value)
-    except (TypeError, ValueError):
-        return AUTOSAVE_DEFAULT_INTERVAL
-    allowed = {item[0] for item in AUTOSAVE_INTERVALS}
-    return seconds if seconds in allowed else AUTOSAVE_DEFAULT_INTERVAL
 
 
 def column_width(config=None):
@@ -117,16 +106,6 @@ def column_width(config=None):
     config = load_config() if config is None else config
     value = config.get('columnWidth', COLUMN_WIDTH_DEFAULT)
     return value if value in COLUMN_WIDTHS else COLUMN_WIDTH_DEFAULT
-
-
-def autosave_settings(config=None):
-    """Включено ли автосохранение и как часто, в секундах."""
-    config = load_config() if config is None else config
-    saved = config.get('autosave', {})
-    return {
-        'enabled': bool(saved.get('enabled', False)),
-        'interval': _clamp_autosave_interval(saved.get('interval', AUTOSAVE_DEFAULT_INTERVAL)),
-    }
 
 
 def spellcheck_settings(config=None):
@@ -176,23 +155,21 @@ def _clean_user_entries(words):
 
 def _read_user_entries():
     """Читать под замком. Старые файлы — слово на строке, без даты."""
-    try:
-        with open(USER_DICT_PATH, 'r', encoding='utf-8') as handle:
-            lines = handle.read().splitlines()
-    except (FileNotFoundError, OSError):
+    text = durable.read_text(USER_DICT_PATH)
+    if not text:
         return []
-    return _clean_user_entries(lines)
+    return _clean_user_entries(text.splitlines())
 
 
 def _write_user_entries(entries):
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(USER_DICT_PATH, 'w', encoding='utf-8', newline='\n') as handle:
-        for entry in entries:
-            line = entry['word']
-            if entry.get('added'):
-                line += '\t' + entry['added']
-            handle.write(line)
-            handle.write('\n')
+    lines = []
+    for entry in entries:
+        line = entry['word']
+        if entry.get('added'):
+            line += '\t' + entry['added']
+        lines.append(line)
+    payload = ('\n'.join(lines) + '\n') if lines else ''
+    durable.write_text(USER_DICT_PATH, payload, backup=True, backup_interval=0, newline='\n')
 
 
 def user_dictionary():
@@ -236,10 +213,6 @@ def ui_settings():
         'media_sizes': media_size_defaults(config),
         'media_size_options': list(MEDIA_SIZE_OPTIONS),
         'column_width': column_width(config),
-        'autosave': autosave_settings(config),
-        'autosave_intervals': [
-            {'value': seconds, 'label': label} for seconds, label in AUTOSAVE_INTERVALS
-        ],
         'spellcheck': spellcheck_settings(config),
         'user_words': user_dictionary(),
     }
@@ -253,15 +226,11 @@ def save_ui_settings(settings):
     config['save'] = {'default_path': settings.get('md_save_dir', '')}
     incoming = settings.get('media_sizes') or {}
     config['mediaSizes'] = {
-        key: _clamp_media_size(incoming.get(key), default)
+        key: _clamp_media_size(key, incoming.get(key), default)
         for key, default in MEDIA_SIZE_DEFAULTS.items()
     }
     config['columnWidth'] = column_width({'columnWidth': settings.get('column_width')})
-    incoming_autosave = settings.get('autosave') or {}
-    config['autosave'] = {
-        'enabled': bool(incoming_autosave.get('enabled', False)),
-        'interval': _clamp_autosave_interval(incoming_autosave.get('interval')),
-    }
+    config.pop('autosave', None)
     if 'spellcheck' in settings:
         incoming_spell = settings.get('spellcheck') or {}
         config['spellcheck'] = {'enabled': bool(incoming_spell.get('enabled', False))}

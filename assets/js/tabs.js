@@ -56,10 +56,6 @@
 
   window.sessionHasDocuments = shouldPersist;
 
-  window.autosaveAllowed = function () {
-    return !switching;
-  };
-
   function describeActive() {
     var tab = tabs[active] || {};
     return {
@@ -289,15 +285,7 @@
 
   function switchTo(index) {
     var run = switchChain.then(function () {
-      var tab = tabs[active];
-      var autosave = tab && !tab.html && tab.dirty && tab.path
-        && window.isAutosaveEnabled && window.isAutosaveEnabled();
-      var pending = autosave ? callApi('autosave_document') : null;
-      return Promise.resolve(pending).then(function () {
-        return performSwitch(index);
-      }, function () {
-        return performSwitch(index);
-      });
+      return performSwitch(index);
     });
     switchChain = run.then(function () {}, function () {});
     return run;

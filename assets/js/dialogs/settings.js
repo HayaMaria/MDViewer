@@ -5,6 +5,7 @@
   var savedFontSize = DEFAULT_FONT_SIZE;
   var spellWordsDraft = [];
   var SIZE_SELECTS = {
+    table: 'settings-size-table',
     image: 'settings-size-image',
     mermaid: 'settings-size-mermaid',
     uml: 'settings-size-uml',
@@ -52,24 +53,10 @@
     Object.keys(SIZE_SELECTS).forEach(function (key) {
       window.fillMediaSizeSelect(SIZE_SELECTS[key], (sizes && sizes[key]) || window.MEDIA_SIZE_DEFAULTS[key]);
     });
-  }
-
-  function fillAutosaveIntervals(intervals, selected) {
-    var select = document.getElementById('settings-autosave-interval');
-    select.innerHTML = '';
-    (intervals || []).forEach(function (item) {
-      var option = document.createElement('option');
-      option.value = String(item.value);
-      option.textContent = item.label;
-      select.appendChild(option);
-    });
-    select.value = String(selected);
-    if (!select.value && select.options.length) select.selectedIndex = 0;
-  }
-
-  function syncAutosaveIntervalState() {
-    var on = document.getElementById('settings-autosave-enabled').checked;
-    document.getElementById('settings-autosave-interval').disabled = !on;
+    var table = document.getElementById(SIZE_SELECTS.table);
+    var width = parseInt(sizes && sizes.table, 10);
+    table.insertAdjacentHTML('afterbegin', '<option value="0">' + window.TABLE_AUTO_LABEL + '</option>');
+    table.value = window.MEDIA_SIZE_OPTIONS.indexOf(width) >= 0 ? String(width) : '0';
   }
 
   function spellKey(word) {
@@ -209,13 +196,6 @@
     if (dictOpen) renderSpellDictionary();
   };
 
-  function readAutosaveSettings() {
-    return {
-      enabled: document.getElementById('settings-autosave-enabled').checked,
-      interval: parseInt(document.getElementById('settings-autosave-interval').value, 10) || 30,
-    };
-  }
-
   // ----- Настройки -----
   window.openSettingsDialog = function () {
     callApi('get_settings').then(function (s) {
@@ -230,10 +210,6 @@
         window.MEDIA_SIZE_OPTIONS = s.media_size_options;
       }
       fillSettingsSizeSelects(s.media_sizes);
-      var autosave = s.autosave || { enabled: false, interval: 30 };
-      document.getElementById('settings-autosave-enabled').checked = !!autosave.enabled;
-      fillAutosaveIntervals(s.autosave_intervals, autosave.interval);
-      syncAutosaveIntervalState();
       setRadio('settings-column', COLUMN_WIDTHS.indexOf(s.column_width) >= 0 ? s.column_width : 'reading');
       var spell = s.spellcheck || { enabled: true };
       document.getElementById('settings-spellcheck-enabled').checked = !!spell.enabled;
@@ -255,7 +231,6 @@
 
   window.saveSettings = function () {
     var mediaSizes = readMediaSizes();
-    var autosave = readAutosaveSettings();
     var spellOn = document.getElementById('settings-spellcheck-enabled').checked;
     var spellWords = spellWordsDraft.map(function (item) {
       return { word: item.word, added: item.added || '' };
@@ -270,13 +245,11 @@
       md_save_dir: document.getElementById('settings-md-path').value,
       media_sizes: mediaSizes,
       column_width: getRadio('settings-column') || 'reading',
-      autosave: autosave,
       spellcheck: { enabled: spellOn },
       user_words: spellWords,
     }).then(function () {
       window.applyColumnWidth(getRadio('settings-column') || 'reading');
       window.applyMediaSizeDefaults(mediaSizes);
-      window.applyAutosaveSettings(autosave);
       if (window.setSpellUserWords) window.setSpellUserWords(spellWords);
       if (window.setSpellcheckEnabled) window.setSpellcheckEnabled(spellOn);
       closeModal('spell-dict-overlay');
@@ -289,7 +262,6 @@
     showFontSize(parseInt(this.value, 10) || DEFAULT_FONT_SIZE);
   });
 
-  document.getElementById('settings-autosave-enabled').addEventListener('change', syncAutosaveIntervalState);
   document.getElementById('settings-spell-open').addEventListener('click', function () {
     window.openSpellDictionary();
   });

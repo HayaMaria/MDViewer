@@ -5,7 +5,7 @@ import webbrowser
 
 import webview
 
-from . import autosave, config, documents, export, session
+from . import config, documents, export, session
 from .state import state
 from .win.titlebar import set_titlebar_theme
 
@@ -184,8 +184,6 @@ class Api:
 
     def save_settings(self, settings):
         config.save_ui_settings(settings)
-        saved = config.autosave_settings()
-        autosave.configure(saved['enabled'], saved['interval'])
 
     def add_user_word(self, word):
         """Слово из меню редактора. Возвращает весь свой словарь."""
@@ -200,15 +198,6 @@ class Api:
         """Текст буфера. Браузер на это показывает запрос разрешения."""
         from .win.clipboard import read_text
         return read_text()
-
-    def configure_autosave(self, enabled, interval):
-        autosave.configure(enabled, interval)
-
-    def arm_autosave(self):
-        autosave.arm()
-
-    def disarm_autosave(self):
-        autosave.disarm()
 
     def set_theme(self, theme):
         config.set_value('theme', theme)
@@ -295,9 +284,6 @@ class Api:
 
     def save_document_as(self):
         documents.save_as()
-
-    def autosave_document(self):
-        return documents.autosave()
 
     def quit(self):
         for slot in state.iter_slots():

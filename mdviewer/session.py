@@ -3,11 +3,16 @@
 Хранит открытые вкладки и место в активной. Черновик пишется только пока текст
 не сохранён на диск, чтобы не дублировать файл при каждом движении курсора.
 Старый файл с одним документом по-прежнему открывается — как одна вкладка.
+
+Файл подменяется целиком: временный файл, сброс на диск, атомарная замена.
+Предыдущая удачная копия лежит рядом как session.json.bak и читается, только
+если основной файл есть, но из него сессия не собирается.
 """
 import json
 import os
 import threading
 
+from . import durable
 from .config import CONFIG_DIR
 
 SESSION_PATH = os.path.join(CONFIG_DIR, 'session.json')
@@ -152,7 +157,7 @@ def merge_windows(data):
     """Все окна сессии — одна пачка вкладок. При запуске открывается одно окно."""
     bundles = iter_windows(data)
     tabs = []
-    seen = set()
+    seen = {}
     for bundle in bundles:
         for tab in bundle.get('tabs') or []:
             if not isinstance(tab, dict):
@@ -160,9 +165,12 @@ def merge_windows(data):
             path = tab.get('path')
             key = os.path.normcase(path) if isinstance(path, str) and path else None
             if key and key in seen:
+                # Позже открытое окно с несохранённым текстом важнее чистой копии.
+                if isinstance(tab.get('draft'), str) and tab.get('dirty'):
+                    tabs[seen[key]] = tab
                 continue
             if key:
-                seen.add(key)
+                seen[key] = len(tabs)
             tabs.append(tab)
     if not tabs:
         return None
@@ -220,15 +228,29 @@ def is_restorable(data):
     return any(bundle_restorable(bundle) for bundle in iter_windows(data))
 
 
-def load_session(path=None):
-    path = SESSION_PATH if path is None else path
-    try:
-        with _lock:
-            with open(path, 'r', encoding='utf-8') as f:
-                raw = json.load(f)
-    except (OSError, json.JSONDecodeError, UnicodeError):
+def _normalized_at(path):
+    """Сессия из одного файла. None — файла нет, он битый или это не сессия."""
+    status, raw = durable.parse_json(path)
+    if status != 'ok':
         return None
     return normalize(raw)
+
+
+def load_session(path=None):
+    path = SESSION_PATH if path is None else path
+    global _last_written
+    with _lock:
+        status, raw = durable.parse_json(path)
+        if status == 'absent':
+            return None
+        data = normalize(raw) if status == 'ok' else None
+        if data is not None:
+            durable.note_good(path)
+            durable.ensure_backup(path)
+            if path == SESSION_PATH:
+                _last_written = json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n'
+            return data
+        return _normalized_at(path + '.bak')
 
 
 def save_session(record, path=None):
@@ -241,11 +263,9 @@ def save_session(record, path=None):
     with _lock:
         if path == SESSION_PATH and payload == _last_written:
             return
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        temporary = path + '.tmp'
-        with open(temporary, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(payload)
-        os.replace(temporary, path)
+        # Запасная копия — предыдущая удачная сессия, не чаще раза в полминуты:
+        # курсор пишется часто, а черновик может быть большим.
+        durable.write_text(path, payload, backup=True, backup_interval=30, newline='\n')
         if path == SESSION_PATH:
             _last_written = payload
 
@@ -256,9 +276,4 @@ def clear_session(path=None):
     with _lock:
         if path == SESSION_PATH:
             _last_written = None
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-        except OSError:
-            return
+        durable.remove_file(path)
