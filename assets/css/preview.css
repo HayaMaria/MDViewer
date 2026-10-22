@@ -112,6 +112,63 @@
   margin: 8px 0;
 }
 
+/* :::center / :::right. Текст в абзаце выравнивается сам.
+   Код, таблицы, цитаты, картинки и схемы сдвигаются целиком. */
+#preview .md-align-center {
+  text-align: center;
+}
+#preview .md-align-right {
+  text-align: right;
+}
+#preview .md-align-center > pre:not(.mdv-sized),
+#preview .md-align-right > pre:not(.mdv-sized),
+#preview .md-align-center > blockquote,
+#preview .md-align-right > blockquote {
+  width: fit-content;
+  max-width: 100%;
+}
+#preview .md-align-center > pre,
+#preview .md-align-center > table,
+#preview .md-align-center > blockquote,
+#preview .md-align-center > .mdv-sized,
+#preview .md-align-center img.mdv-sized {
+  margin-left: auto;
+  margin-right: auto;
+}
+#preview .md-align-right > pre,
+#preview .md-align-right > table,
+#preview .md-align-right > blockquote,
+#preview .md-align-right > .mdv-sized,
+#preview .md-align-right img.mdv-sized {
+  margin-left: auto;
+  margin-right: 0;
+}
+#preview .md-align-center img.mdv-sized,
+#preview .md-align-right img.mdv-sized {
+  display: block;
+}
+#preview .md-align-center > ul,
+#preview .md-align-center > ol,
+#preview .md-align-right > ul,
+#preview .md-align-right > ol {
+  width: fit-content;
+  text-align: start;
+}
+#preview .md-align-center > ul,
+#preview .md-align-center > ol {
+  margin-left: auto;
+  margin-right: auto;
+}
+#preview .md-align-right > ul,
+#preview .md-align-right > ol {
+  margin-left: auto;
+  margin-right: 0;
+}
+#preview .md-align-center pre,
+#preview .md-align-right pre {
+  text-align: left;
+}
+
 #preview ul,
 #preview ol {
   padding-left: 24px;
@@ -265,11 +322,16 @@
 #preview table {
   border-collapse: collapse;
   margin: 12px 0;
-  width: 100%;
+  width: var(--mdv-default-table, max-content);
   max-width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+#preview table.mdv-table-sized {
+  max-width: none;
+  box-sizing: border-box;
 }
 
 #preview th,
@@ -279,6 +341,16 @@
   text-align: left;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+#preview th[align="center"],
+#preview td[align="center"] {
+  text-align: center;
+}
+
+#preview th[align="right"],
+#preview td[align="right"] {
+  text-align: right;
 }
 
 #preview th {
@@ -337,7 +409,7 @@
    (кроме .mdv-sized — у них фиксированная ширина в px) */
 #preview img:not(.mdv-sized),
 #preview pre:not(.mdv-sized),
-#preview table,
+#preview table:not(.mdv-table-sized),
 #preview blockquote,
 #preview iframe,
 #preview video {

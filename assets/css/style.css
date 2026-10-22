@@ -1091,7 +1091,6 @@ body.splitter-drag iframe {
   min-height: 0;
 }
 
-.autosave-block,
 .spellcheck-block,
 .spell-dict {
   display: flex;
@@ -1162,23 +1161,6 @@ body.splitter-drag iframe {
 
 .checkbox-row input {
   accent-color: var(--accent);
-}
-
-.autosave-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-}
-
-.autosave-row .input {
-  width: 160px;
-  flex-shrink: 0;
-}
-
-.autosave-row .input:disabled {
-  opacity: 0.55;
 }
 
 .media-size-defaults {

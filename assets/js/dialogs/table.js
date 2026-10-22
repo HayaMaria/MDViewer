@@ -20,10 +20,25 @@
     document.getElementById('table-data-msg').style.display = tpl ? 'none' : 'block';
   };
 
+  function fillTableWidth() {
+    var select = document.getElementById('table-width');
+    var fallback = window.getTableWidthDefault();
+    var label = 'По умолчанию (' + (fallback ? fallback + ' px' : window.TABLE_AUTO_LABEL.toLowerCase()) + ')';
+    select.innerHTML = '<option value="">' + label + '</option>' + window.mediaSizeOptionsHtml();
+    select.value = '';
+  }
+
+  function tableWidthSuffix() {
+    var n = parseInt(document.getElementById('table-width').value, 10);
+    if (window.MEDIA_SIZE_OPTIONS.indexOf(n) < 0) return '';
+    return '{width=' + n + 'px}\n';
+  }
+
   window.openTableConfig = function () {
     columnIndex = 0;
     document.getElementById('table-columns-list').innerHTML = '';
     document.getElementById('table-data-preview').value = '';
+    fillTableWidth();
     window.addTableColumn();
     window.addTableColumn();
     window.switchTableMode();
@@ -85,7 +100,7 @@
     for (var r = 0; r < maxRows; r++) {
       lines.push(markdownRow(cols.map(function (c) { return c.values[r] || ''; })));
     }
-    return '\n' + lines.join('\n') + '\n';
+    return tableWithWidth(lines);
   }
 
   function buildTableTemplate(cols, rows) {
@@ -97,10 +112,18 @@
     }
     var lines = [markdownRow(header), markdownRow(sep)];
     for (var r = 0; r < rows; r++) lines.push(markdownRow(row));
-    return '\n' + lines.join('\n') + '\n';
+    return tableWithWidth(lines);
+  }
+
+  // Пустая строка перед {width=…} обязательна: без неё Markdown
+  // считает эту строку ещё одной ячейкой таблицы.
+  function tableWithWidth(lines) {
+    var suffix = tableWidthSuffix();
+    return '\n' + lines.join('\n') + '\n' + (suffix ? '\n' + suffix : '');
   }
 
   document.getElementById('table-header-row').addEventListener('change', updateTablePreview);
+  document.getElementById('table-width').addEventListener('change', updateTablePreview);
 
   window.runInsertTable = function () {
     if (isTemplateMode()) {

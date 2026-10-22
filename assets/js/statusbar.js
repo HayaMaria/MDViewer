@@ -38,7 +38,6 @@
 
   window.markSaved = function () {
     dirty = false;
-    if (window.noteAutosaveSaved) window.noteAutosaveSaved();
     if (window.__htmlMode) window.setReadOnlyStatus();
     else setSaveStatus('Сохранено', 'saved');
   };
@@ -57,6 +56,5 @@
     revision += 1;
     dirty = true;
     setSaveStatus('Не сохранено', 'unsaved');
-    if (window.scheduleAutosave) window.scheduleAutosave();
   };
 })();

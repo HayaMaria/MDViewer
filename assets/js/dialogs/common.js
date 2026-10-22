@@ -53,7 +53,9 @@ window.trimBlankLines = function (text) {
 
 // ===== Размеры медиа (изображения / схемы / диаграммы / графики) =====
 window.MEDIA_SIZE_OPTIONS = [200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000];
-window.MEDIA_SIZE_DEFAULTS = { image: 500, mermaid: 600, uml: 450, chart: 600 };
+// table: 0 — «По содержимому», ширина не задаётся.
+window.MEDIA_SIZE_DEFAULTS = { table: 0, image: 500, mermaid: 600, uml: 450, chart: 600 };
+window.TABLE_AUTO_LABEL = 'По содержимому';
 
 window.mediaSizeOptionsHtml = function () {
   var html = '';
@@ -68,6 +70,12 @@ window.fillMediaSizeSelect = function (selectId, selected) {
   if (!el) return;
   el.innerHTML = window.mediaSizeOptionsHtml();
   if (selected != null && selected !== '') el.value = String(selected);
+};
+
+window.getTableWidthDefault = function () {
+  var defaults = window.__mediaSizeDefaults || window.MEDIA_SIZE_DEFAULTS;
+  var n = parseInt(defaults && defaults.table, 10);
+  return window.MEDIA_SIZE_OPTIONS.indexOf(n) >= 0 ? n : 0;
 };
 
 window.getMediaSizeDefault = function (kind) {
@@ -94,5 +102,8 @@ window.applyMediaSizeDefaults = function (sizes) {
   preview.style.setProperty('--mdv-default-mermaid', merged.mermaid + 'px');
   preview.style.setProperty('--mdv-default-uml', merged.uml + 'px');
   preview.style.setProperty('--mdv-default-chart', merged.chart + 'px');
+  var table = window.getTableWidthDefault();
+  if (table) preview.style.setProperty('--mdv-default-table', table + 'px');
+  else preview.style.removeProperty('--mdv-default-table');
   if (window.refreshPreviewMedia) window.refreshPreviewMedia();
 };

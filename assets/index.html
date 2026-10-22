@@ -147,6 +147,23 @@
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
+      <button class="fmt-btn" title="По центру" onclick="toggleAlign('center')">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="2" width="14" height="1.7" rx="0.4" />
+          <rect x="3.5" y="7.1" width="9" height="1.7" rx="0.4" />
+          <rect x="1" y="12.3" width="14" height="1.7" rx="0.4" />
+        </svg>
+      </button>
+      <button class="fmt-btn" title="По правому краю" onclick="toggleAlign('right')">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="2" width="14" height="1.7" rx="0.4" />
+          <rect x="6" y="7.1" width="9" height="1.7" rx="0.4" />
+          <rect x="3" y="12.3" width="12" height="1.7" rx="0.4" />
+        </svg>
+      </button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
       <button class="fmt-btn" title="Цитата" onclick="toggleBlockquote()">❝</button>
       <button class="fmt-btn" title="Маркированный список" onclick="toggleBulletList()">•</button>
       <button class="fmt-btn" title="Нумерованный список" onclick="toggleOrderedList()">1.</button>
@@ -281,17 +298,6 @@
             <button type="button" class="btn btn-secondary" id="settings-spell-open">Открыть словарь</button>
           </div>
         </div>
-        <div class="autosave-block">
-          <label class="field-label">Автосохранение</label>
-          <label class="checkbox-row">
-            <input type="checkbox" id="settings-autosave-enabled">
-            Сохранять изменения автоматически
-          </label>
-          <label class="autosave-row">
-            <span>Периодичность</span>
-            <select id="settings-autosave-interval" class="input" disabled></select>
-          </label>
-        </div>
         <div>
           <label class="field-label">Размер шрифта в редакторе</label>
           <div class="font-size-control">
@@ -308,6 +314,10 @@
         <div>
           <label class="field-label">Размер по умолчанию</label>
           <div class="media-size-defaults">
+            <label class="media-size-row">
+              <span>Таблицы</span>
+              <select id="settings-size-table" class="input input-sm"></select>
+            </label>
             <label class="media-size-row">
               <span>Изображения</span>
               <select id="settings-size-image" class="input input-sm"></select>
@@ -402,6 +412,11 @@
       <div class="modal-body row">
         <label><input type="radio" name="table-mode" value="template" checked onclick="switchTableMode()"> Пустой шаблон</label>
         <label><input type="radio" name="table-mode" value="data" onclick="switchTableMode()"> Из данных</label>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Ширина</label>
+        <select id="table-width" class="input"></select>
+        <div class="hint">Число пишется строкой {width=400px} через пустую строку после таблицы.</div>
       </div>
       <div id="table-template-mode" class="modal-body">
         <div class="row">
@@ -591,7 +606,6 @@
   <script src="js/statusbar.js"></script>
   <script src="js/session.js"></script>
   <script src="js/tabs.js"></script>
-  <script src="js/autosave.js"></script>
   <script src="js/splitter.js"></script>
   <script src="js/search.js"></script>
   <script src="js/toolbar.js"></script>

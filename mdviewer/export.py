@@ -5,7 +5,7 @@ from datetime import datetime
 
 import webview
 
-from . import config
+from . import config, durable
 from .paths import BUILD_DIR, CSS_DIR, LIB_DIR, MERMAID_THEMES
 from .state import alert, call_js, state
 
@@ -41,8 +41,7 @@ def export_html(mode='full', theme='current', save_path=''):
     if not path:
         return
     try:
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(html)
+        durable.write_text(path, html, backup=False, newline=None)
     except OSError as e:
         alert(f'Ошибка сохранения: {e}')
 

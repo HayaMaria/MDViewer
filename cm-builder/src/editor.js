@@ -11,6 +11,7 @@ import { builtinHighlight, codeHighlighting } from "./code-highlight.js";
 import { highlightCodeBlock } from "./highlight.js";
 import { editorCodeLanguage } from "./code-languages.js";
 import { bindSpellcheck, pasteClipboard, spellCompartment, spellcheckOff } from "./spellcheck.js";
+import { alignExtension, alignMarker } from "./align.js";
 import mermaidThemes from "../../assets/mermaid-themes.json";
 
 // Mermaid и Chart.js не входят в бандл редактора: их файлы подключаются,
@@ -158,6 +159,61 @@ function processImageSizes(html) {
     (_, attrs) => `<img${attrs} class="mdv-sized" data-kind="image" data-size="default">`);
 }
 
+const TABLE_WIDTH_LINE = /^\{width=(\d+)(?:px)?\}$/i;
+
+function tableWidthPx(text) {
+  const m = String(text || "").trim().match(TABLE_WIDTH_LINE);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return n >= 50 && n <= 2000 ? n : null;
+}
+
+function withTableWidth(attrs, n) {
+  let tag = attrs || "";
+  if (/\bmdv-table-sized\b/.test(tag)) return `<table${tag}>`;
+  if (/\bclass=/i.test(tag)) tag = tag.replace(/\bclass=(["'])/i, "class=$1mdv-table-sized ");
+  else tag += ' class="mdv-table-sized"';
+  if (/\bstyle=/i.test(tag)) tag = tag.replace(/\bstyle=(["'])/i, `style=$1width:${n}px;`);
+  else tag += ` style="width:${n}px"`;
+  return `<table${tag}>`;
+}
+
+// Строка {width=400px} через пустую строку после таблицы задаёт её ширину.
+// В целом документе она приходит отдельным абзацем сразу за </table>.
+function processTableWidths(html) {
+  return html.replace(
+    /<table\b([^>]*)>((?:(?!<table\b)[\s\S])*?)<\/table>\s*<p>\s*\{width=(\d+)(?:px)?\}\s*<\/p>/gi,
+    (full, attrs, body, w) => {
+      const n = tableWidthPx(`{width=${w}px}`);
+      if (n == null) return full;
+      return `${withTableWidth(attrs, n)}${body}</table>`;
+    }
+  );
+}
+
+// В превью таблица и строка ширины — разные токены. Склеиваем их,
+// иначе ширина рисуется текстом, а таблица остаётся узкой.
+function absorbTableWidths(tokens) {
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== "table") continue;
+    let j = i + 1;
+    if (tokens[j] && tokens[j].type === "space") j++;
+    const para = tokens[j];
+    if (!para || para.type !== "paragraph") continue;
+    const n = tableWidthPx(para.text);
+    if (n == null) continue;
+    let extra = "";
+    for (let k = i + 1; k <= j; k++) extra += tokens[k].raw || "";
+    tokens[i].raw = (tokens[i].raw || "") + extra;
+    tokens[i].mdvWidth = n;
+    tokens.splice(i + 1, j - i);
+  }
+}
+
+function processRenderedHtml(html) {
+  return processTableWidths(processImageSizes(html));
+}
+
 // В экспорте подставляем фактическую ширину вместо CSS-переменных настроек
 function resolveDefaultMediaSizes(html) {
   const defaults = Object.assign(
@@ -174,12 +230,20 @@ function resolveDefaultMediaSizes(html) {
     if (kind === "chart") el.style.height = Math.round(w * 5 / 8) + "px";
     el.removeAttribute("data-size");
   });
+  const tableWidth = parseInt(defaults.table, 10);
+  if (tableWidth > 0) {
+    tmp.querySelectorAll("table:not(.mdv-table-sized)").forEach((table) => {
+      table.classList.add("mdv-table-sized");
+      table.style.width = tableWidth + "px";
+    });
+  }
   return tmp.innerHTML;
 }
 
 // Настройка marked:
 // — [текст](url) — открывается в браузере
 // — [текст](url+) — открывается в новом окне приложения
+// — :::center / :::right — выравнивание блока
 // — блоки ```mermaid / ```chart / ```nomnoml — контейнеры для отрисовки диаграмм
 // Чекбокс задачи — свой значок. Клик по нему в превью переключает [ ] / [x] в тексте.
 function taskBox({ checked }) {
@@ -300,6 +364,7 @@ const renderer = {
   code: renderCodeBlock,
   checkbox: taskBox,
 };
+marked.use({ extensions: [alignExtension] });
 marked.use({ renderer });
 
 // ===== Производительность превью: debounce + правка одного блока =====
@@ -417,6 +482,7 @@ function changedRange(prev, nextRaws) {
 // null — лексер покрыл не весь текст, тогда рисуем документ одним куском.
 function previewBlockTokens(content) {
   const tokens = marked.lexer(content);
+  absorbTableWidths(tokens);
   let covered = "";
   const blocks = [];
   for (let i = 0; i < tokens.length; i++) {
@@ -434,7 +500,11 @@ function renderBlockElement(token, links) {
   wrap.className = "mdv-block";
   const list = [token];
   list.links = links || {};
-  wrap.innerHTML = processImageSizes(marked.parser(list));
+  let html = processRenderedHtml(marked.parser(list));
+  if (token.mdvWidth) {
+    html = html.replace(/<table\b([^>]*)>/i, (_, attrs) => withTableWidth(attrs, token.mdvWidth));
+  }
+  wrap.innerHTML = html;
   return wrap;
 }
 
@@ -762,7 +832,7 @@ function updatePreview(force) {
 function renderFallback(content) {
   const wrap = document.createElement("div");
   wrap.className = "mdv-block";
-  wrap.innerHTML = processImageSizes(marked.parse(content));
+  wrap.innerHTML = processRenderedHtml(marked.parse(content));
   return wrap;
 }
 
@@ -1333,6 +1403,7 @@ const LEAD_RE = /^(?:\s*>)*\s*/;
 // не превращался в текст: *** на отдельной строке — черта, а не жирный курсив.
 const HR_RE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
 const TABLE_ROW_RE = /^\s*\|/;
+const TABLE_WIDTH_RE = /^\s*\{width=\d+(?:px)?\}\s*$/i;
 const TABLE_SEP_CELL_RE = /^\s*:?-+:?\s*$/;
 const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 
@@ -1785,6 +1856,169 @@ window.toggleBlockquote = function () {
   if (changes.length) applyFormatting(changes);
 };
 
+// Блок :::center / :::right, внутри которого стоит строка. Незакрытый тянется до конца.
+function alignBlockAt(doc, lineNo) {
+  const code = codeBlocks(doc);
+  const stack = [];
+  const found = [];
+  for (let n = 1; n <= doc.lines; n++) {
+    if (inCodeBlock(code, n)) continue;
+    const mark = alignMarker(doc.line(n).text);
+    if (!mark) continue;
+    if (mark.kind === "open") stack.push({ align: mark.align, open: n, close: null });
+    else if (stack.length) {
+      const top = stack.pop();
+      top.close = n;
+      found.push(top);
+    }
+  }
+  found.push(...stack);
+  let block = null;
+  for (const item of found) {
+    const end = item.close == null ? doc.lines : item.close;
+    if (lineNo < item.open || lineNo > end) continue;
+    if (!block || item.open >= block.open) block = item;
+  }
+  return block;
+}
+
+function removeAlignBlock(doc, block) {
+  const openLine = doc.line(block.open);
+  if (block.close == null) {
+    const to = openLine.number < doc.lines ? openLine.to + 1 : openLine.to;
+    return [{ from: openLine.from, to, insert: "" }];
+  }
+  const closeLine = doc.line(block.close);
+  if (closeLine.number === openLine.number + 1 && closeLine.number === doc.lines) {
+    return [{ from: openLine.from, to: closeLine.to, insert: "" }];
+  }
+  const closeFrom = closeLine.number === doc.lines ? closeLine.from - 1 : closeLine.from;
+  const closeTo = closeLine.number === doc.lines ? closeLine.to : closeLine.to + 1;
+  return [
+    { from: openLine.from, to: openLine.to + 1, insert: "" },
+    { from: closeFrom, to: closeTo, insert: "" },
+  ];
+}
+
+function linesRange(doc, from, to) {
+  const lines = [];
+  for (let n = from; n <= to; n++) lines.push(doc.line(n));
+  return lines;
+}
+
+// Таблица целиком. Строка {width=…} стоит через пустую строку, иначе
+// Markdown затягивает её в последнюю ячейку.
+function tableBounds(doc, lineNo) {
+  const last = doc.lines;
+  const isRow = (n) => n >= 1 && n <= last && TABLE_ROW_RE.test(doc.line(n).text);
+  const isWidth = (n) => n >= 1 && n <= last && TABLE_WIDTH_RE.test(doc.line(n).text);
+  const isBlank = (n) => n >= 1 && n <= last && isBlankLine(doc.line(n).text);
+  let row = 0;
+  if (isRow(lineNo)) row = lineNo;
+  else if (isWidth(lineNo)) {
+    let n = lineNo - 1;
+    if (isBlank(n)) n--;
+    if (isRow(n)) row = n;
+  } else if (isBlank(lineNo) && isWidth(lineNo + 1) && isRow(lineNo - 1)) {
+    row = lineNo - 1;
+  }
+  if (!row) return null;
+  let from = row;
+  let to = row;
+  while (isRow(from - 1)) from--;
+  while (isRow(to + 1)) to++;
+  let widthAt = to + 1;
+  if (isBlank(widthAt) && isWidth(widthAt + 1)) widthAt++;
+  if (isWidth(widthAt)) to = widthAt;
+  return { from, to };
+}
+
+// Код, схема и таблица, которых коснулось выделение, берутся целиком:
+// иначе метка ::: оказалась бы внутри ``` и превью её не увидело бы.
+function expandAlignRange(doc, from, to) {
+  const code = codeBlocks(doc);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const block of code) {
+      if (block.close < from || block.open > to) continue;
+      if (block.open < from) { from = block.open; grew = true; }
+      if (block.close > to) { to = block.close; grew = true; }
+    }
+    for (let n = from; n <= to; n++) {
+      if (code.some((block) => n >= block.open && n <= block.close)) continue;
+      const bounds = tableBounds(doc, n);
+      if (!bounds) continue;
+      if (bounds.from < from) { from = bounds.from; grew = true; }
+      if (bounds.to > to) { to = bounds.to; grew = true; }
+    }
+  }
+  return { from, to };
+}
+
+// Пустое выделение: абзац, либо весь блок кода/схемы/таблицы под курсором.
+function alignTargetLines(state) {
+  const doc = state.doc;
+  const selected = selectedLines(state);
+  if (!state.selection.main.empty) {
+    const range = expandAlignRange(doc, selected[0].number, selected[selected.length - 1].number);
+    return linesRange(doc, range.from, range.to);
+  }
+  const code = codeBlocks(doc);
+  const current = selected[0];
+  const fence = code.find((block) => current.number >= block.open && current.number <= block.close);
+  if (fence) return linesRange(doc, fence.open, fence.close);
+  const table = tableBounds(doc, current.number);
+  if (table) return linesRange(doc, table.from, table.to);
+  const joins = (line) => !inCodeBlock(code, line.number)
+    && !alignMarker(line.text)
+    && !isBlankLine(line.text)
+    && !FENCE_RE.test(line.text)
+    && !TABLE_ROW_RE.test(line.text)
+    && !TABLE_WIDTH_RE.test(line.text);
+  if (!joins(current)) return selected;
+  let from = current.number;
+  let to = current.number;
+  while (from > 1 && joins(doc.line(from - 1))) from--;
+  while (to < doc.lines && joins(doc.line(to + 1))) to++;
+  return linesRange(doc, from, to);
+}
+
+window.toggleAlign = function (align) {
+  if (align !== "center" && align !== "right") return;
+  if (view.state.readOnly) return;
+  view.focus();
+  const state = view.state;
+  const doc = state.doc;
+  const headLine = doc.lineAt(state.selection.main.head).number;
+  const block = alignBlockAt(doc, headLine);
+  if (block) {
+    if (block.align === align) applyFormatting(removeAlignBlock(doc, block));
+    else {
+      const openLine = doc.line(block.open);
+      const text = openLine.text.replace(/(:::[ \t]*)(center|right)/, "$1" + align);
+      applyFormatting({ from: openLine.from, to: openLine.to, insert: text });
+    }
+    return;
+  }
+  const lines = alignTargetLines(state);
+  if (!lines.length) return;
+  const first = lines[0];
+  const last = lines[lines.length - 1];
+  if (lines.length === 1 && isBlankLine(first.text)) {
+    const open = ":::" + align + "\n";
+    applyFormatting(
+      { from: first.from, to: first.to, insert: open + "\n:::" },
+      { anchor: first.from + open.length }
+    );
+    return;
+  }
+  applyFormatting([
+    { from: first.from, insert: ":::" + align + "\n" },
+    { from: last.to, insert: "\n:::" },
+  ]);
+};
+
 window.toggleHeading = function (level) {
   if (level < 1 || level > 6) level = 1;
   const hashes = '#'.repeat(level);
@@ -1925,5 +2159,5 @@ exportRenderer.checkbox = taskBox;
 
 window.getRenderedBodyHTMLExport = () =>
   resolveDefaultMediaSizes(
-    processImageSizes(marked.parse(view.state.doc.toString(), { renderer: exportRenderer }))
+    processRenderedHtml(marked.parse(view.state.doc.toString(), { renderer: exportRenderer }))
   );
