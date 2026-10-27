@@ -199,7 +199,6 @@
   // ----- Настройки -----
   window.openSettingsDialog = function () {
     callApi('get_settings').then(function (s) {
-      setRadio('settings-mode', s.export.mode);
       setRadio('settings-theme', s.export.theme);
       document.getElementById('settings-export-path').value = s.export.save_path || s.downloads_dir;
       document.getElementById('settings-md-path').value = s.md_save_dir || s.downloads_dir;
@@ -238,7 +237,6 @@
     callApi('save_settings', {
       font_size: parseInt(document.getElementById('settings-font-size').value, 10) || DEFAULT_FONT_SIZE,
       export: {
-        mode: getRadio('settings-mode') || 'full',
         theme: getRadio('settings-theme') || 'current',
         save_path: document.getElementById('settings-export-path').value,
       },
@@ -271,7 +269,6 @@
   // ----- Экспортировать HTML как... -----
   window.openExportAsDialog = function () {
     callApi('get_settings').then(function (s) {
-      setRadio('exportas-mode', s.export.mode);
       setRadio('exportas-theme', s.export.theme);
       document.getElementById('exportas-path').value = s.export.save_path;
     });
@@ -282,7 +279,6 @@
 
   window.runExportAs = function () {
     callApi('export_html',
-      getRadio('exportas-mode') || 'full',
       getRadio('exportas-theme') || 'current',
       document.getElementById('exportas-path').value
     ).then(function () {

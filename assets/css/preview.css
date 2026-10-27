@@ -358,11 +358,7 @@
 }
 
 #preview a {
-  color: var(--link-color);
-  text-decoration: none;
-}
-
-#preview a:hover {
+  color: #4c9aff;
   text-decoration: underline;
 }
 
@@ -447,4 +443,9 @@
   height: auto;
   aspect-ratio: 8 / 5;
   min-height: 0;
+}
+
+/* В тёмной теме график чуть тише страницы. Правило здесь, потому что этот файл вшивается в экспорт. */
+[data-theme="dark"] [id^="chart-"] {
+  filter: brightness(0.85);
 }

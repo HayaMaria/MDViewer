@@ -22,7 +22,6 @@ DEFAULTS = {
     'syncScroll': True,
 }
 EXPORT_DEFAULTS = {
-    'mode': 'full',
     'theme': 'current',
     'save_path': '',
 }
