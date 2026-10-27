@@ -2561,13 +2561,22 @@ function resolveLooseRemoteImages() {
   return chain.then(() => ({ map: map }));
 }
 
+function waitForPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
 // theme: 'dark' | 'light' — уже выбранная тема файла, не «current».
 // embed: встроить картинки. Иначе у локального файла в HTML остаётся только имя.
 window.prepareExportBody = function (theme, embed) {
-  const load = embed ? embedDocumentImages() : resolveLooseRemoteImages();
-  return load.then((packed) => {
-    if (packed && packed.error) return packed;
-    return paintExportBody(theme, !!embed, packed && packed.map);
+  if (typeof window.showExportBusy === "function") window.showExportBusy();
+  return waitForPaint().then(() => {
+    const load = embed ? embedDocumentImages() : resolveLooseRemoteImages();
+    return load.then((packed) => {
+      if (packed && packed.error) return packed;
+      return paintExportBody(theme, !!embed, packed && packed.map);
+    });
   });
 };
 

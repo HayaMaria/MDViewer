@@ -24,36 +24,47 @@ def export_html(theme='current', save_path='', embed_images=None):
     embed_images: встроить картинки в HTML. None — взять значение из настроек.
     """
     if state.html_mode:
+        call_js('hideExportBusy')
         alert('Экспорт недоступен: HTML-файл открыт в режиме только для чтения')
         return
-    if theme == 'current':
-        theme = call_js('getCurrentTheme') or 'dark'
-    if theme not in ('dark', 'light'):
-        theme = 'dark'
-    if embed_images is None:
-        embed_images = bool(config.export_settings().get('embed_images', False))
-    else:
-        embed_images = bool(embed_images)
-    body_html = _await_js('prepareExportBody', theme, embed_images)
-    if isinstance(body_html, dict) and body_html.get('error'):
-        alert(body_html.get('message') or 'Ошибка экспорта')
-        return
-    if not isinstance(body_html, str):
-        alert('Ошибка экспорта: не удалось подготовить схемы')
-        return
+    call_js('showExportBusy')
     try:
-        html = build_html(body_html, theme, config.column_width())
-    except FileNotFoundError as e:
-        alert(f'Ошибка экспорта: не найден файл {e.filename}')
-        return
+        if theme == 'current':
+            theme = call_js('getCurrentTheme') or 'dark'
+        if theme not in ('dark', 'light'):
+            theme = 'dark'
+        if embed_images is None:
+            embed_images = bool(config.export_settings().get('embed_images', False))
+        else:
+            embed_images = bool(embed_images)
+        body_html = _await_js('prepareExportBody', theme, embed_images)
+        if isinstance(body_html, dict) and body_html.get('error'):
+            _fail_export(body_html.get('message') or 'Ошибка экспорта')
+            return
+        if not isinstance(body_html, str):
+            _fail_export('Ошибка экспорта: не удалось подготовить схемы')
+            return
+        try:
+            html = build_html(body_html, theme, config.column_width())
+        except FileNotFoundError as e:
+            _fail_export(f'Ошибка экспорта: не найден файл {e.filename}')
+            return
 
-    path = _choose_target_path(save_path)
-    if not path:
-        return
-    try:
-        durable.write_text(path, html, backup=False, newline=None)
-    except OSError as e:
-        alert(f'Ошибка сохранения: {e}')
+        path = _choose_target_path(save_path)
+        if not path:
+            return
+        try:
+            durable.write_text(path, html, backup=False, newline=None)
+        except OSError as e:
+            _fail_export(f'Ошибка сохранения: {e}')
+    finally:
+        call_js('hideExportBusy')
+
+
+def _fail_export(message):
+    """Снять плашку до alert, иначе сообщение остаётся под затемнением."""
+    call_js('hideExportBusy')
+    alert(message)
 
 
 def _await_js(function, *args, timeout=120):

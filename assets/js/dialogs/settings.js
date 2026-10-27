@@ -294,16 +294,29 @@
 
   window.pickExportAsFolder = function () { pickFolderInto('exportas-path'); };
 
+  window.showExportBusy = function () {
+    var el = document.getElementById('export-busy');
+    if (!el) return;
+    var svg = el.querySelector('svg');
+    if (svg && svg.setCurrentTime) svg.setCurrentTime(0);
+    el.classList.add('open');
+  };
+
+  window.hideExportBusy = function () {
+    var el = document.getElementById('export-busy');
+    if (el) el.classList.remove('open');
+  };
+
   window.runExportAs = function () {
     var images = document.getElementById('exportas-images');
     var embed = images && !images.hidden && getRadio('exportas-embed') === 'embed';
+    window.showExportBusy();
+    closeModal('export-as-overlay');
     callApi('export_html',
       getRadio('exportas-theme') || 'current',
       document.getElementById('exportas-path').value,
       embed
-    ).then(function () {
-      closeModal('export-as-overlay');
-    });
+    ).then(window.hideExportBusy, window.hideExportBusy);
   };
 
   document.querySelectorAll('input[name="settings-embed"]').forEach(function (input) {

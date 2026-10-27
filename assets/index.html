@@ -404,6 +404,39 @@
     </div>
   </div>
 
+  <div id="export-busy" class="export-busy" role="status" aria-live="polite">
+    <div class="export-busy-card">
+      <span class="export-pack-bob">
+        <svg class="export-pack" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+          <path class="export-pack-hole" d="M10 30H54L46 18H18Z" />
+          <path d="M10 30L18 18H46L54 30" />
+          <g class="export-pack-sheet">
+            <animateTransform attributeName="transform" type="translate" dur="1.8s" repeatCount="indefinite" calcMode="linear"
+              keyTimes="0;0.42;0.56;0.66;1"
+              values="0 0;0 0;0 22;0 22;0 22" />
+            <animate attributeName="opacity" dur="1.8s" repeatCount="indefinite" calcMode="linear"
+              keyTimes="0;0.36;0.42;0.58;0.66;1"
+              values="0;0;1;1;0;0" />
+            <rect class="export-pack-fill" x="25" y="0" width="14" height="16" rx="1.5" />
+            <path d="M28 5h8M28 9h8M28 13h5" />
+          </g>
+          <path class="export-pack-fill" d="M10 30H54V52H10Z" />
+          <path class="export-pack-fill" d="M10 30L32 30L32 18L18 18Z">
+            <animate attributeName="d" dur="1.8s" repeatCount="indefinite" calcMode="linear"
+              keyTimes="0;0.10;0.14;0.19;0.24;0.28;0.62;0.66;0.71;0.77;0.82;1"
+              values="M10 30L32 30L32 18L18 18Z;M10 30L32 30L32 18L18 18Z;M10 30L28 17.4L29.5 10L18 18Z;M10 30L17.5 9.3L22.8 4.9L18 18Z;M10 30L6.2 8.3L15.6 4.2L18 18Z;M10 30L-2.6 12L10 6.5L18 18Z;M10 30L-2.6 12L10 6.5L18 18Z;M10 30L6.2 8.3L15.6 4.2L18 18Z;M10 30L17.5 9.3L22.8 4.9L18 18Z;M10 30L28 17.4L29.5 10L18 18Z;M10 30L32 30L32 18L18 18Z;M10 30L32 30L32 18L18 18Z" />
+          </path>
+          <path class="export-pack-fill" d="M54 30L32 30L32 18L46 18Z">
+            <animate attributeName="d" dur="1.8s" repeatCount="indefinite" calcMode="linear"
+              keyTimes="0;0.10;0.14;0.19;0.24;0.28;0.62;0.66;0.71;0.77;0.82;1"
+              values="M54 30L32 30L32 18L46 18Z;M54 30L32 30L32 18L46 18Z;M54 30L36 17.4L34.5 10L46 18Z;M54 30L46.5 9.3L41.2 4.9L46 18Z;M54 30L57.8 8.3L48.4 4.2L46 18Z;M54 30L66.6 12L54 6.5L46 18Z;M54 30L66.6 12L54 6.5L46 18Z;M54 30L57.8 8.3L48.4 4.2L46 18Z;M54 30L46.5 9.3L41.2 4.9L46 18Z;M54 30L36 17.4L34.5 10L46 18Z;M54 30L32 30L32 18L46 18Z;M54 30L32 30L32 18L46 18Z" />
+          </path>
+        </svg>
+      </span>
+      <div class="export-busy-label">Экспортируем HTML</div>
+    </div>
+  </div>
+
   <!-- ===== Изображение ===== -->
   <div id="image-config-overlay" class="modal-popup">
     <div class="modal" style="width:440px">
