@@ -8,6 +8,7 @@ from . import APP_TITLE, UNTITLED
 from .config import DEFAULTS, load_config
 from .paths import INDEX_HTML
 from .state import bind_slot, state, unbind_slot
+from .win.splash import attach as attach_splash
 from .win.titlebar import set_titlebar_theme
 
 _ids = itertools.count(1)
@@ -38,7 +39,12 @@ def _create_window(theme, options):
 
     def init_with_titlebar(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        self.events.before_show += lambda: set_titlebar_theme(self, dark)
+
+        def prepare():
+            set_titlebar_theme(self, dark)
+            attach_splash(self, theme)
+
+        self.events.before_show += prepare
 
     with _create_lock:
         webview.Window.__init__ = init_with_titlebar
@@ -90,6 +96,8 @@ def create_editor_window(launch=None, x=None, y=None):
             unbind_slot(token)
 
     def on_loaded():
+        # Заглушку снимает страница, когда документ уже на экране.
+        # Событие loaded — это только конец навигации, редактор ещё пустой.
         token = bind_slot(slot)
         try:
             for callback in loaded_callbacks:

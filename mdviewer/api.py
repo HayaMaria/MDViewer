@@ -291,6 +291,11 @@ class Api:
     def show_welcome(self):
         documents.show_welcome()
 
+    def dismiss_splash(self):
+        """Убрать заглушку запуска. Страница зовёт это, когда документ уже нарисован."""
+        from .win.splash import dismiss
+        dismiss(state.window)
+
     def save_session(self, snapshot):
         documents.remember_session(snapshot, from_js=True)
 

@@ -185,6 +185,7 @@
     if (tab.welcome && !tab.dirty && !tab.content && !tab.editorState) {
       var load = {};
       tab._welcomeLoad = load;
+      window.__welcomePending = true;
       if (window.setFileName) window.setFileName(tab.title);
       if (window.setEditorContent) window.setEditorContent('');
       if (window.markSaved) window.markSaved();
@@ -192,6 +193,7 @@
       fetch('texts/default.md')
         .then(function (response) { return response.text(); })
         .then(function (text) {
+          window.__welcomePending = false;
           if (tab._welcomeLoad !== load || tabs.indexOf(tab) < 0) return;
           if (tab.dirty || !tab.welcome) return;
           tab.content = text || '';
@@ -199,7 +201,9 @@
           tab.editorState = null;
           showMarkdown(tab);
         })
-        .catch(function () {});
+        .catch(function () {
+          window.__welcomePending = false;
+        });
       return;
     }
     // exitHtmlMode вызывает markSaved и затирает флаг уже выбранной вкладки.
@@ -482,6 +486,7 @@
   };
 
   window.welcomeTextReady = function (text) {
+    window.__welcomePending = false;
     var tab = tabs[active];
     if (!tab || !tab.welcome || tab.dirty || window.__htmlMode) return;
     tab.content = text || '';
@@ -496,6 +501,7 @@
     active = 0;
     render();
     if (wasHtml && window.exitHtmlMode) window.exitHtmlMode();
+    window.__welcomePending = true;
     if (window.setEditorContent) window.setEditorContent('');
     if (window.markSaved) window.markSaved();
     if (prevWelcome) prevWelcome(epoch);

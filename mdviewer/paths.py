@@ -7,6 +7,7 @@ ICON_PATH = ROOT / 'icon.ico'
 
 ASSETS_DIR = ROOT / 'assets'
 INDEX_HTML = ASSETS_DIR / 'index.html'
+SPLASH_ICON = ASSETS_DIR / 'splash-icon.png'
 CSS_DIR = ASSETS_DIR / 'css'
 LIB_DIR = ASSETS_DIR / 'lib'
 BUILD_DIR = ASSETS_DIR / 'build'
