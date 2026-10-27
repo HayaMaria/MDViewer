@@ -351,6 +351,50 @@ function renderCodeBlock({ text, lang }) {
   return highlightCodeBlock(text, info.type);
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function isRemoteHref(href) {
+  return /^(https?:)/i.test(href || "");
+}
+
+// Короткая ссылка -> прямой адрес картинки. Объявлено рано: превью строится при запуске.
+const remoteImageCache = new Map();
+
+// У адреса нет расширения картинки: это может быть страница, а не файл.
+// Прямой файл отдаём странице как есть, короткую ссылку сначала раскрывает Python.
+function remoteImageNeedsResolve(href) {
+  const path = String(href || "").split(/[?#]/)[0];
+  return !/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path);
+}
+
+function isVideoHref(href) {
+  const path = String(href || "").split(/[?#]/)[0];
+  return /\.(mp4|m4v|webm|mov|ogv|ogg|mkv|avi)$/i.test(path);
+}
+
+// Локальный файл не отдаём браузеру страницы: WebView2 не грузит file://.
+// Путь остаётся в data-mdv-file, а байты подставляет Python.
+function renderMarkdownImage({ href, title, text }) {
+  const alt = escapeHtml(text || "");
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+  if (isRemoteHref(href)) {
+    if (remoteImageNeedsResolve(href)) {
+      const known = remoteImageCache.get(href);
+      const src = known ? ` src="${escapeHtml(known)}"` : "";
+      const pending = known ? "" : ' data-mdv-resolve="1"';
+      return `<img${src} alt="${alt}"${titleAttr} data-mdv-remote="${encodeURIComponent(href)}"${pending}>`;
+    }
+    return `<img src="${escapeHtml(href)}" alt="${alt}"${titleAttr}>`;
+  }
+  return `<img alt="${alt}"${titleAttr} data-mdv-file="${encodeURIComponent(href || "")}">`;
+}
+
 const renderer = {
   link({ href, title, text }) {
     const openInApp = href.endsWith("+");
@@ -361,6 +405,7 @@ const renderer = {
     }
     return `<span class="external-link" data-url="${cleanHref}"${titleAttr}>${text} ↗</span>`;
   },
+  image: renderMarkdownImage,
   code: renderCodeBlock,
   checkbox: taskBox,
 };
@@ -846,6 +891,8 @@ function updatePreview(force) {
   }
 
   if (pinEl) pinScroll(previewEl, pinEl, pinOffset);
+  hydrateLocalImages(freshRoots);
+  hydrateRemoteImages(freshRoots);
   if (captureDiagrams) {
     finishPreviewSettle(settleId, previewEl, pinEl, pinOffset);
     return;
@@ -2111,28 +2158,61 @@ window.insertLink = function () {
   }
 };
 
-window.insertImage = function () {
+window.imageInsertContext = function () {
+  return { text: inlineSelectionText(view.state).text || "" };
+};
+
+function imageDest(text) {
+  return String(text || "").replace(/\\/g, "/").replace(/>/g, "");
+}
+
+function imageCaption(text) {
+  return String(text || "").replace(/[\[\]]/g, "");
+}
+
+function selectionLooksLikeUrl(text) {
+  return /^https?:\/\/\S+$/i.test(text);
+}
+
+function selectionLooksLikeFile(text) {
+  if (/^[A-Za-z]:[\\/]/.test(text)) return true;
+  if (text.startsWith("\\\\") || text.startsWith("//")) return true;
+  if (/^file:/i.test(text)) return true;
+  const imageName = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(text);
+  if (imageName && /[\\/]/.test(text)) return true;
+  return imageName && !/\s/.test(text);
+}
+
+// Выделенный текст сразу оборачивается в синтаксис картинки.
+// Пустое выделение сюда не попадает: для него открывается диалог.
+window.wrapSelectionAsImage = function () {
   view.focus();
-  const width = (typeof window.getMediaSizeDefault === "function"
-    ? window.getMediaSizeDefault("image")
-    : 100);
-  const sizeSuffix = "{width=" + width + "px}";
   const { from, to, text } = inlineSelectionText(view.state);
-  if (!text) {
-    const insert = "![подпись](image.jpg)" + sizeSuffix;
-    applyFormatting({ from: to, insert }, { anchor: to + 2, head: to + 9 });
-  } else if (URL_RE.test(text)) {
-    applyFormatting(
-      { from, to, insert: "![подпись](" + text + ")" + sizeSuffix },
-      { anchor: from + 2, head: from + 9 }
-    );
+  if (!text) return false;
+  const width = (window.getMediaSizeDefault && window.getMediaSizeDefault("image")) || 500;
+  let insert;
+  let caret;
+  if (selectionLooksLikeUrl(text) || selectionLooksLikeFile(text)) {
+    insert = "![](<" + imageDest(text) + ">){width=" + width + "px}";
+    caret = 2;
   } else {
-    const insert = "![" + text + "](url)" + sizeSuffix;
-    applyFormatting(
-      { from, to, insert },
-      { anchor: from + text.length + 4, head: from + text.length + 7 }
-    );
+    const caption = imageCaption(text);
+    insert = "![" + caption + "](<>){width=" + width + "px}";
+    caret = 2 + caption.length + 3;
   }
+  applyFormatting({ from, to, insert }, { anchor: from + caret, head: from + caret });
+  return true;
+};
+
+window.replaceSelection = function (text) {
+  const sel = view.state.selection.main;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: text },
+    selection: { anchor: sel.from + text.length },
+    scrollIntoView: true,
+    userEvent: "input.formatting",
+  });
+  view.focus();
 };
 
 // Отдельный блок после текущей строки: с пустой строкой перед ним (иначе
@@ -2179,6 +2259,7 @@ exportRenderer.link = function ({ href, title, text }) {
   const titleAttr = title ? ` title="${title}"` : "";
   return `<a href="${cleanHref}"${titleAttr} target="_blank">${text}</a>`;
 };
+exportRenderer.image = renderMarkdownImage;
 exportRenderer.code = renderCodeBlock;
 exportRenderer.checkbox = taskBox;
 
@@ -2297,8 +2378,200 @@ function dropDiagramSource(host) {
   });
 }
 
+// Картинки вне блоков кода. Фрагмент — как в тексте, вместе с {width}, если он есть.
+const IMAGE_RE = /!\[([^\]]*)\]\((<[^>\n]+>|[^)\s]+)(?:\s+"[^"]*")?\)(\{width=\d+(?:px)?\})?/g;
+
+function maskInlineCode(line) {
+  return line.replace(/`+[^`]*`+/g, (match) => " ".repeat(match.length));
+}
+
+function findDocumentImages(text) {
+  const lines = String(text || "").split("\n");
+  const images = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^[ ]{0,3}(`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const masked = maskInlineCode(line);
+    IMAGE_RE.lastIndex = 0;
+    let match;
+    while ((match = IMAGE_RE.exec(masked))) {
+      const destRaw = match[2];
+      const dest = destRaw.startsWith("<") ? destRaw.slice(1, -1) : destRaw;
+      images.push({
+        line: i + 1,
+        snippet: line.slice(match.index, match.index + match[0].length),
+        dest: dest,
+      });
+    }
+  }
+  return images;
+}
+
+function imageFileName(href) {
+  const clean = String(href || "").split(/[?#]/)[0];
+  const parts = clean.split(/[/\\]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+window.exportImageInfo = function () {
+  const images = findDocumentImages(view.state.doc.toString());
+  let local = false;
+  for (let i = 0; i < images.length; i++) {
+    if (!isRemoteHref(images[i].dest)) local = true;
+  }
+  return { any: images.length > 0, local: local };
+};
+
+function imageErrorMessage(image) {
+  return 'Произошла ошибка. Проверьте ссылку на изображение "' + image.snippet + '" в строке ' + image.line + '.';
+}
+
+function embedDocumentImages() {
+  const images = findDocumentImages(view.state.doc.toString());
+  const map = {};
+  let chain = Promise.resolve(null);
+  images.forEach((image) => {
+    chain = chain.then((failed) => {
+      if (failed) return failed;
+      if (!image.dest || typeof window.callApi !== "function") {
+        return imageErrorMessage(image);
+      }
+      return window.callApi("embed_image", image.dest).then((result) => {
+        if (!result || !result.ok || !result.uri) return imageErrorMessage(image);
+        map[image.dest] = result.uri;
+        return null;
+      }, () => imageErrorMessage(image));
+    });
+  });
+  return chain.then((failed) => failed ? { error: true, message: failed } : { map: map });
+}
+
+function rewriteExportImages(host, embed, uriMap) {
+  host.querySelectorAll("img").forEach((img) => {
+    const encoded = img.getAttribute("data-mdv-file");
+    const remote = img.getAttribute("data-mdv-remote");
+    const href = encoded
+      ? decodeURIComponent(encoded)
+      : remote
+        ? decodeURIComponent(remote)
+        : (img.getAttribute("src") || "");
+    if (embed) {
+      const uri = uriMap && uriMap[href];
+      if (uri) img.setAttribute("src", uri);
+    } else if (encoded) {
+      const name = imageFileName(href);
+      if (name) img.setAttribute("src", name);
+    } else if (remote) {
+      const direct = (uriMap && uriMap[href]) || remoteImageCache.get(href);
+      if (direct && !isVideoHref(direct)) img.setAttribute("src", direct);
+      else if (!isVideoHref(href)) img.setAttribute("src", href);
+    }
+    img.removeAttribute("data-mdv-file");
+    img.removeAttribute("data-mdv-remote");
+    img.removeAttribute("data-mdv-resolve");
+  });
+}
+
+// path -> { mtime, uri }. Пока файл на диске не изменился, байты повторно не читаем.
+const localImageCache = new Map();
+
+function hydrateLocalImages(roots) {
+  if (!roots || typeof window.callApi !== "function") return;
+  const imgs = [];
+  roots.forEach((root) => {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll("img[data-mdv-file]").forEach((img) => imgs.push(img));
+  });
+  imgs.forEach((img) => {
+    const href = decodeURIComponent(img.getAttribute("data-mdv-file") || "");
+    if (!href) return;
+    const known = localImageCache.get(href);
+    if (known && known.uri) img.src = known.uri;
+    window.callApi("preview_image", href, known ? known.mtime : "").then((result) => {
+      if (!result || !result.ok || !img.isConnected) return;
+      if (result.unchanged && known && known.uri) {
+        img.src = known.uri;
+        return;
+      }
+      if (!result.uri) return;
+      localImageCache.set(href, { mtime: result.mtime || "", uri: result.uri });
+      img.src = result.uri;
+    }, () => {});
+  });
+}
+
+function hydrateRemoteImages(roots) {
+  if (!roots || typeof window.callApi !== "function") return;
+  const imgs = [];
+  roots.forEach((root) => {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll("img[data-mdv-resolve]").forEach((img) => imgs.push(img));
+  });
+  imgs.forEach((img) => {
+    const href = decodeURIComponent(img.getAttribute("data-mdv-remote") || "");
+    if (!href) return;
+    const known = remoteImageCache.get(href);
+    if (known) {
+      img.src = known;
+      img.removeAttribute("data-mdv-resolve");
+      return;
+    }
+    window.callApi("resolve_image", href).then((result) => {
+      if (!img.isConnected) return;
+      img.removeAttribute("data-mdv-resolve");
+      if (!result || !result.ok || !result.url || isVideoHref(result.url)) {
+        if (!isVideoHref(href)) img.src = href;
+        return;
+      }
+      remoteImageCache.set(href, result.url);
+      img.src = result.url;
+    }, () => {
+      if (img.isConnected && !isVideoHref(href)) img.src = href;
+    });
+  });
+}
+
+function resolveLooseRemoteImages() {
+  const images = findDocumentImages(view.state.doc.toString()).filter((image) =>
+    isRemoteHref(image.dest) && remoteImageNeedsResolve(image.dest)
+  );
+  const map = {};
+  let chain = Promise.resolve();
+  images.forEach((image) => {
+    chain = chain.then(() => {
+      const known = remoteImageCache.get(image.dest);
+      if (known) {
+        map[image.dest] = known;
+        return null;
+      }
+      if (typeof window.callApi !== "function") return null;
+      return window.callApi("resolve_image", image.dest).then((result) => {
+        if (result && result.ok && result.url) {
+          remoteImageCache.set(image.dest, result.url);
+          map[image.dest] = result.url;
+        }
+      }, () => {});
+    });
+  });
+  return chain.then(() => ({ map: map }));
+}
+
 // theme: 'dark' | 'light' — уже выбранная тема файла, не «current».
-window.prepareExportBody = function (theme) {
+// embed: встроить картинки. Иначе у локального файла в HTML остаётся только имя.
+window.prepareExportBody = function (theme, embed) {
+  const load = embed ? embedDocumentImages() : resolveLooseRemoteImages();
+  return load.then((packed) => {
+    if (packed && packed.error) return packed;
+    return paintExportBody(theme, !!embed, packed && packed.map);
+  });
+};
+
+function paintExportBody(theme, embed, uriMap) {
   const name = theme === "light" ? "light" : "dark";
   const host = document.createElement("div");
   host.setAttribute("data-mdv-export-stage", "1");
@@ -2330,6 +2603,7 @@ window.prepareExportBody = function (theme) {
     );
   return job.then(() => {
     dropDiagramSource(host);
+    rewriteExportImages(host, embed, uriMap);
     const body = host.innerHTML;
     host.remove();
     return body;
@@ -2337,4 +2611,4 @@ window.prepareExportBody = function (theme) {
     host.remove();
     return Promise.reject(err);
   });
-};
+}

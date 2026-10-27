@@ -24,6 +24,7 @@ DEFAULTS = {
 EXPORT_DEFAULTS = {
     'theme': 'current',
     'save_path': '',
+    'embed_images': False,
 }
 # Доступные ширины медиа (изображения, схемы, диаграммы, графики), в px
 MEDIA_SIZE_OPTIONS = tuple(range(200, 1001, 50))
@@ -221,7 +222,14 @@ def save_ui_settings(settings):
     """Сохранить значения из диалога «Настройки»."""
     config = load_config()
     config['fontSize'] = int(settings['font_size'])
-    config['export'] = {key: settings['export'].get(key, default) for key, default in EXPORT_DEFAULTS.items()}
+    incoming_export = settings.get('export') or {}
+    saved_export = {}
+    for key, default in EXPORT_DEFAULTS.items():
+        value = incoming_export.get(key, default)
+        if key == 'embed_images':
+            value = bool(value)
+        saved_export[key] = value
+    config['export'] = saved_export
     config['save'] = {'default_path': settings.get('md_save_dir', '')}
     incoming = settings.get('media_sizes') or {}
     config['mediaSizes'] = {

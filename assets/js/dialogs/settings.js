@@ -23,6 +23,15 @@
     return checked ? checked.value : null;
   }
 
+  function syncEmbedHint(radioName, hintId, onlyLocal) {
+    var hint = document.getElementById(hintId);
+    if (!hint) return;
+    var link = getRadio(radioName) !== 'embed';
+    var local = true;
+    if (onlyLocal && window.exportImageInfo) local = !!window.exportImageInfo().local;
+    hint.hidden = !(link && local);
+  }
+
   function pickFolderInto(inputId) {
     callApi('pick_folder').then(function (path) {
       if (path) document.getElementById(inputId).value = path;
@@ -200,6 +209,8 @@
   window.openSettingsDialog = function () {
     callApi('get_settings').then(function (s) {
       setRadio('settings-theme', s.export.theme);
+      setRadio('settings-embed', s.export.embed_images ? 'embed' : 'link');
+      syncEmbedHint('settings-embed', 'settings-embed-hint', false);
       document.getElementById('settings-export-path').value = s.export.save_path || s.downloads_dir;
       document.getElementById('settings-md-path').value = s.md_save_dir || s.downloads_dir;
       savedFontSize = s.font_size;
@@ -239,6 +250,7 @@
       export: {
         theme: getRadio('settings-theme') || 'current',
         save_path: document.getElementById('settings-export-path').value,
+        embed_images: getRadio('settings-embed') === 'embed',
       },
       md_save_dir: document.getElementById('settings-md-path').value,
       media_sizes: mediaSizes,
@@ -268,9 +280,14 @@
 
   // ----- Экспортировать HTML как... -----
   window.openExportAsDialog = function () {
+    var info = window.exportImageInfo ? window.exportImageInfo() : { any: false, local: false };
+    var images = document.getElementById('exportas-images');
+    if (images) images.hidden = !info.any;
     callApi('get_settings').then(function (s) {
       setRadio('exportas-theme', s.export.theme);
+      setRadio('exportas-embed', s.export.embed_images ? 'embed' : 'link');
       document.getElementById('exportas-path').value = s.export.save_path;
+      syncEmbedHint('exportas-embed', 'exportas-embed-hint', true);
     });
     openModal('export-as-overlay');
   };
@@ -278,11 +295,25 @@
   window.pickExportAsFolder = function () { pickFolderInto('exportas-path'); };
 
   window.runExportAs = function () {
+    var images = document.getElementById('exportas-images');
+    var embed = images && !images.hidden && getRadio('exportas-embed') === 'embed';
     callApi('export_html',
       getRadio('exportas-theme') || 'current',
-      document.getElementById('exportas-path').value
+      document.getElementById('exportas-path').value,
+      embed
     ).then(function () {
       closeModal('export-as-overlay');
     });
   };
+
+  document.querySelectorAll('input[name="settings-embed"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      syncEmbedHint('settings-embed', 'settings-embed-hint', false);
+    });
+  });
+  document.querySelectorAll('input[name="exportas-embed"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      syncEmbedHint('exportas-embed', 'exportas-embed-hint', true);
+    });
+  });
 })();

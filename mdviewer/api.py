@@ -212,6 +212,31 @@ class Api:
         result = state.window.create_file_dialog(webview.FileDialog.FOLDER)
         return result[0] if result else ''
 
+    def pick_image(self):
+        """Файл картинки. Проводник открывается в «Загрузках»."""
+        result = state.window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            directory=config.downloads_dir(),
+            file_types=(
+                'Images (*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg)',
+                'All files (*.*)',
+            ),
+        )
+        return result[0] if result else ''
+
+    def preview_image(self, href, known_mtime=''):
+        from .images import preview_image
+        return preview_image(href, known_mtime)
+
+    def embed_image(self, href):
+        from .images import embed_image
+        return embed_image(href)
+
+    def resolve_image(self, href):
+        """Короткая ссылка на страницу → прямой адрес картинки для превью."""
+        from .images import resolve_image
+        return resolve_image(href)
+
     # ===== Документ =====
 
     def open_startup_file(self):
@@ -369,8 +394,8 @@ class Api:
     def export_html_default(self):
         export.export_with_saved_settings()
 
-    def export_html(self, theme, save_path):
-        export.export_html(theme, save_path)
+    def export_html(self, theme, save_path, embed_images=None):
+        export.export_html(theme, save_path, embed_images)
 
     # ===== Окно и ссылки =====
 
