@@ -1237,3 +1237,64 @@ body.file-drop #file-drop {
 body.file-drop iframe {
   pointer-events: none;
 }
+
+/* Плашка на время сборки и записи HTML. Выше модалок и рамки перетаскивания файла. */
+.export-busy {
+  display: none;
+  position: fixed;
+  z-index: 10001;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.export-busy.open { display: flex; }
+
+.export-busy-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 36px 24px;
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.export-busy-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.export-pack-bob {
+  display: block;
+  width: 64px;
+  height: 64px;
+  transform: scale(1.2);
+  transform-origin: center;
+}
+
+.export-pack {
+  display: block;
+  width: 64px;
+  height: 64px;
+  overflow: visible;
+}
+
+.export-pack path,
+.export-pack rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.export-pack .export-pack-fill { fill: var(--bg); }
+.export-pack .export-pack-mask { stroke: none; }
+.export-pack .export-pack-hole {
+  fill: color-mix(in srgb, var(--bg) 72%, var(--fg));
+  stroke: none;
+}
