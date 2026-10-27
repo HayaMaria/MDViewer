@@ -49,6 +49,13 @@
     if (e.key === 'Escape' && openDropdown) closeAllDropdowns();
   });
 
+  // Иначе щелчок по кнопке снимает выделение в редакторе раньше, чем кнопка его прочитает.
+  document.querySelectorAll('.fmt-btn').forEach(function (btn) {
+    btn.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+    });
+  });
+
   // ===== Кнопка синхронной прокрутки =====
   var syncScrollOn = true;
   var syncScrollBtn = document.getElementById('sync-scroll-btn');

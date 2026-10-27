@@ -268,6 +268,12 @@
           <label><input type="radio" name="settings-theme" value="light"> Светлая</label>
           <label><input type="radio" name="settings-theme" value="current" checked> Как в редакторе</label>
         </div>
+        <div class="radio-list">
+          <label class="field-label">Изображения при экспорте</label>
+          <label><input type="radio" name="settings-embed" value="link" checked> Не встраивать</label>
+          <label><input type="radio" name="settings-embed" value="embed"> Встраивать</label>
+          <div class="hint" id="settings-embed-hint">Локальные изображения должны лежать рядом с HTML-файлом, чтобы отображаться.</div>
+        </div>
         <div>
           <label class="field-label">Папка сохранения HTML</label>
           <div class="path-picker">
@@ -377,6 +383,12 @@
           <label><input type="radio" name="exportas-theme" value="light"> Светлая</label>
           <label><input type="radio" name="exportas-theme" value="current" checked> Как в редакторе</label>
         </div>
+        <div class="radio-list" id="exportas-images">
+          <label class="field-label">Изображения</label>
+          <label><input type="radio" name="exportas-embed" value="link" checked> Не встраивать</label>
+          <label><input type="radio" name="exportas-embed" value="embed"> Встраивать</label>
+          <div class="hint" id="exportas-embed-hint">Локальные изображения должны лежать рядом с HTML-файлом, чтобы отображаться.</div>
+        </div>
         <div>
           <label class="field-label">Сохранить в</label>
           <div class="path-picker">
@@ -388,6 +400,45 @@
       <div class="modal-footer">
         <button class="btn" onclick="closeModal('export-as-overlay')">Отмена</button>
         <button class="btn btn-primary" onclick="runExportAs()">Экспортировать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Изображение ===== -->
+  <div id="image-config-overlay" class="modal-popup">
+    <div class="modal" style="width:440px">
+      <div class="modal-header">
+        <span>Изображение</span>
+        <button class="modal-close" onclick="closeModal('image-config-overlay')">&times;</button>
+      </div>
+      <div class="modal-body row">
+        <label><input type="radio" name="image-source" value="file" checked> Файл на компьютере</label>
+        <label><input type="radio" name="image-source" value="url"> Адрес в интернете</label>
+      </div>
+      <div class="modal-body">
+        <div id="image-file-row">
+          <label class="field-label">Файл</label>
+          <div class="path-picker">
+            <input type="text" id="image-file" class="input" spellcheck="false">
+            <button type="button" class="btn btn-secondary" id="image-browse">Обзор...</button>
+          </div>
+        </div>
+        <div id="image-url-row" hidden>
+          <label class="field-label">Адрес</label>
+          <input type="text" id="image-url" class="input" spellcheck="false" placeholder="https://">
+        </div>
+        <div>
+          <label class="field-label">Подпись</label>
+          <input type="text" id="image-caption" class="input" spellcheck="false">
+        </div>
+        <div>
+          <label class="field-label">Ширина</label>
+          <select id="image-size" class="input"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal('image-config-overlay')">Отмена</button>
+        <button class="btn btn-primary" id="image-insert">Вставить</button>
       </div>
     </div>
   </div>
@@ -621,6 +672,7 @@
   <script src="js/dialogs/settings.js"></script>
   <script src="js/dialogs/table.js"></script>
   <script src="js/dialogs/diagrams.js"></script>
+  <script src="js/dialogs/image.js"></script>
   <script src="js/dialogs/chart.js"></script>
   <script src="js/main.js"></script>
   <script src="js/filedrop.js"></script>

@@ -15,11 +15,14 @@ FILE_TYPES = ('HTML files (*.html)', 'All files (*.*)')
 
 def export_with_saved_settings():
     settings = config.export_settings()
-    export_html(settings['theme'], settings['save_path'])
+    export_html(settings['theme'], settings['save_path'], settings.get('embed_images', False))
 
 
-def export_html(theme='current', save_path=''):
-    """theme: 'dark' | 'light' | 'current'. save_path: папка; пусто — спросить диалогом."""
+def export_html(theme='current', save_path='', embed_images=None):
+    """theme: 'dark' | 'light' | 'current'. save_path: папка; пусто — спросить диалогом.
+
+    embed_images: встроить картинки в HTML. None — взять значение из настроек.
+    """
     if state.html_mode:
         alert('Экспорт недоступен: HTML-файл открыт в режиме только для чтения')
         return
@@ -27,7 +30,14 @@ def export_html(theme='current', save_path=''):
         theme = call_js('getCurrentTheme') or 'dark'
     if theme not in ('dark', 'light'):
         theme = 'dark'
-    body_html = _await_js('prepareExportBody', theme)
+    if embed_images is None:
+        embed_images = bool(config.export_settings().get('embed_images', False))
+    else:
+        embed_images = bool(embed_images)
+    body_html = _await_js('prepareExportBody', theme, embed_images)
+    if isinstance(body_html, dict) and body_html.get('error'):
+        alert(body_html.get('message') or 'Ошибка экспорта')
+        return
     if not isinstance(body_html, str):
         alert('Ошибка экспорта: не удалось подготовить схемы')
         return
