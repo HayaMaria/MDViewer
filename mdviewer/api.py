@@ -369,8 +369,8 @@ class Api:
     def export_html_default(self):
         export.export_with_saved_settings()
 
-    def export_html(self, mode, theme, save_path):
-        export.export_html(mode, theme, save_path)
+    def export_html(self, theme, save_path):
+        export.export_html(theme, save_path)
 
     # ===== Окно и ссылки =====
 

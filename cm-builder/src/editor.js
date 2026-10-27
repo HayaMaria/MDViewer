@@ -381,6 +381,12 @@ const DIAGRAM_CACHE_LIMIT = 100;
 
 let previewTimer = null;
 let lastPreviewContent = null;
+// Пока экспорт рисует схемы в другой теме, превью не перестраивается:
+// mermaid.initialize один на всё окно.
+let previewHold = false;
+let previewDirty = false;
+// Один проход экспорта сам дорисовывает все схемы, без второй очереди.
+let captureDiagrams = false;
 
 // Кэш отрендеренных SVG: сигнатура -> innerHTML контейнера
 const diagramSVGCache = new Map();
@@ -415,11 +421,22 @@ function svgCachePut(key, svg) {
 // Отложенное обновление превью: пока пользователь печатает, перестройка не
 // выполняется; запускается через PREVIEW_DEBOUNCE_MS после последней правки
 function schedulePreviewUpdate() {
+  if (previewHold) {
+    previewDirty = true;
+    return;
+  }
   if (previewTimer !== null) clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
     previewTimer = null;
     updatePreview();
   }, PREVIEW_DEBOUNCE_MS);
+}
+
+function releasePreviewHold() {
+  previewHold = false;
+  if (!previewDirty) return;
+  previewDirty = false;
+  schedulePreviewUpdate();
 }
 
 // Уже показанные блоки: исходник и его обёртка в колонке превью.
@@ -740,6 +757,10 @@ function finishPreviewSettle(settleId, previewEl, pinEl, pinOffset) {
 function updatePreview(force) {
   // В режиме просмотра HTML-файла превью занято iframe — не перерисовываем
   if (window.__htmlMode) return;
+  if (previewHold) {
+    previewDirty = true;
+    return;
+  }
   const content = view.state.doc.toString();
   // Текст не менялся с прошлой перестройки — перерисовывать нечего
   if (!force && content === lastPreviewContent) return;
@@ -825,6 +846,10 @@ function updatePreview(force) {
   }
 
   if (pinEl) pinScroll(previewEl, pinEl, pinOffset);
+  if (captureDiagrams) {
+    finishPreviewSettle(settleId, previewEl, pinEl, pinOffset);
+    return;
+  }
   drawDiagrams(freshRoots).then(() => finishPreviewSettle(settleId, previewEl, pinEl, pinOffset));
 }
 
@@ -2157,7 +2182,159 @@ exportRenderer.link = function ({ href, title, text }) {
 exportRenderer.code = renderCodeBlock;
 exportRenderer.checkbox = taskBox;
 
-window.getRenderedBodyHTMLExport = () =>
-  resolveDefaultMediaSizes(
+function exportMarkup() {
+  return resolveDefaultMediaSizes(
     processRenderedHtml(marked.parse(view.state.doc.toString(), { renderer: exportRenderer }))
   );
+}
+
+// Дорисовать все схемы превью, включая те, что ещё стоят в очереди за экраном.
+function paintAllPreviewDiagrams() {
+  const preview = document.getElementById("preview");
+  if (!preview) return Promise.resolve();
+  const mermaids = [];
+  const nomnomls = [];
+  preview.querySelectorAll(".mermaid").forEach((el) => mermaids.push(el));
+  preview.querySelectorAll(".nomnoml-diagram").forEach((el) => nomnomls.push(el));
+  for (let i = diagramQueue.length - 1; i >= 0; i--) {
+    const el = diagramQueue[i];
+    if (!el.classList) continue;
+    if (el.classList.contains("mermaid") || el.classList.contains("nomnoml-diagram")) {
+      diagramQueue.splice(i, 1);
+    }
+  }
+  return paintMermaid(mermaids).then(() => Promise.all(nomnomls.map(paintNomnoml)));
+}
+
+// После перестройки превью новые графики без canvas дорисовать самим.
+function paintUnreadyCharts() {
+  const preview = document.getElementById("preview");
+  if (!preview) return Promise.resolve();
+  const charts = [];
+  preview.querySelectorAll("[id^='chart-']").forEach((el) => {
+    if (!el.querySelector("canvas") && !el.querySelector("p")) charts.push(el);
+  });
+  for (let i = diagramQueue.length - 1; i >= 0; i--) {
+    const el = diagramQueue[i];
+    if (charts.indexOf(el) !== -1) diagramQueue.splice(i, 1);
+  }
+  return Promise.all(charts.map(paintChart));
+}
+
+function copyPaintedDiagrams(host) {
+  const preview = document.getElementById("preview");
+  if (!preview) return;
+  const liveMermaid = preview.querySelectorAll(".mermaid");
+  const liveNomnoml = preview.querySelectorAll(".nomnoml-diagram");
+  host.querySelectorAll(".mermaid").forEach((el, i) => {
+    if (liveMermaid[i]) el.replaceWith(liveMermaid[i].cloneNode(true));
+  });
+  host.querySelectorAll(".nomnoml-diagram").forEach((el, i) => {
+    if (liveNomnoml[i]) el.replaceWith(liveNomnoml[i].cloneNode(true));
+  });
+}
+
+function nomnomlStyled(code, theme) {
+  const dark = theme !== "light";
+  const stroke = dark ? "#d4d4d4" : "#333333";
+  const line = dark ? "#aaaaaa" : "#555555";
+  return "#fill: transparent\n#stroke: " + stroke + "\n#lineColor: " + line + "\n" + code;
+}
+
+function paintExportNomnoml(el, theme) {
+  const code = decodeURIComponent(el.getAttribute("data-nomnoml-code") || "");
+  if (!code) return Promise.resolve();
+  return ensureNomnoml().then(() => {
+    if (!el.isConnected || !window.nomnoml) return;
+    try {
+      el.innerHTML = window.nomnoml.renderSvg(nomnomlStyled(code, theme), document);
+      if (el.innerHTML.indexOf("<svg") !== -1) scaleDiagramSvg(el);
+    } catch (e) {
+      el.innerHTML = `<pre style="color:#ff6b6b;">Parse error: ${e.message}</pre>`;
+    }
+  });
+}
+
+function restoreMermaidTheme() {
+  if (!window.mermaid) return;
+  const editor = getPreviewTheme() === "light" ? "light" : "dark";
+  window.mermaid.initialize(mermaidThemes[editor] || mermaidThemes.light);
+  mermaidThemeApplied = editor;
+}
+
+// Схемы для файла в теме, отличной от редактора. Превью в это время не трогаем.
+function paintExportMermaid(nodes, theme) {
+  if (!nodes.length) return Promise.resolve();
+  nodes.forEach((el, i) => {
+    el.id = "mdv-export-mermaid-" + i;
+  });
+  previewHold = true;
+  if (previewTimer !== null) {
+    clearTimeout(previewTimer);
+    previewTimer = null;
+    previewDirty = true;
+  }
+  return loadScript("lib/mermaid.min.js").then(() => {
+    window.mermaid.initialize(mermaidThemes[theme] || mermaidThemes.light);
+    mermaidThemeApplied = theme;
+    return Promise.resolve(window.mermaid.run({ nodes })).catch(() => { });
+  }).then(() => {
+    nodes.forEach((el) => {
+      if (el.querySelector("svg")) scaleDiagramSvg(el);
+    });
+  }).finally(() => {
+    restoreMermaidTheme();
+    releasePreviewHold();
+  });
+}
+
+function dropDiagramSource(host) {
+  host.querySelectorAll(".mermaid, .nomnoml-diagram").forEach((el) => {
+    if (el.querySelector("svg")) {
+      el.removeAttribute("data-code");
+      el.removeAttribute("data-nomnoml-code");
+    }
+  });
+}
+
+// theme: 'dark' | 'light' — уже выбранная тема файла, не «current».
+window.prepareExportBody = function (theme) {
+  const name = theme === "light" ? "light" : "dark";
+  const host = document.createElement("div");
+  host.setAttribute("data-mdv-export-stage", "1");
+  // За экраном, но не display:none и не visibility:hidden: иначе Mermaid
+  // снимает нулевой размер. fixed не раздвигает прокрутку окна.
+  host.style.cssText = "position:fixed;left:0;top:0;width:2400px;transform:translateX(-12000px);pointer-events:none;";
+  host.innerHTML = exportMarkup();
+  document.body.appendChild(host);
+  const same = getPreviewTheme() === name;
+  const job = same
+    ? Promise.resolve().then(() => {
+      if (previewTimer !== null) {
+        clearTimeout(previewTimer);
+        previewTimer = null;
+      }
+      const stale = view.state.doc.toString() !== lastPreviewContent;
+      if (stale) {
+        captureDiagrams = true;
+        try {
+          updatePreview();
+        } finally {
+          captureDiagrams = false;
+        }
+      }
+      return paintAllPreviewDiagrams().then(() => paintUnreadyCharts());
+    }).then(() => copyPaintedDiagrams(host))
+    : paintExportMermaid(Array.from(host.querySelectorAll(".mermaid")), name).then(() =>
+      Promise.all(Array.from(host.querySelectorAll(".nomnoml-diagram")).map((el) => paintExportNomnoml(el, name)))
+    );
+  return job.then(() => {
+    dropDiagramSource(host);
+    const body = host.innerHTML;
+    host.remove();
+    return body;
+  }, (err) => {
+    host.remove();
+    return Promise.reject(err);
+  });
+};
