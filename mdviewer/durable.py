@@ -1,10 +1,12 @@
 """Запись файла, которую обрыв питания не превращает в обрезанный текст.
 
-Новый текст сначала попадает во временный файл в той же папке и сбрасывается
-на диск. Потом имя цели атомарно переключается на него. Пока замена не прошла,
-читатель видит прежний целый файл. Если основной файл потом окажется битым,
-читается запасная копия .bak — но только когда основной файл на месте:
-удалённый файл значит, что запись специально стёрли.
+Новый текст сначала попадает во временный файл в той же папке. При sync=True
+он сбрасывается на диск, затем имя цели атомарно переключается на него.
+sync=False оставляет данные в кэше ОС: замена имени не подставляет обрезанный
+файл вместо прежнего, но свежая копия может не пережить питание. Пока замена
+не прошла, читатель видит прежний целый файл. Если основной файл потом
+окажется битым, читается запасная копия .bak — но только когда основной файл
+на месте: удалённый файл значит, что запись специально стёрли.
 """
 import json
 import logging
@@ -15,6 +17,9 @@ import time
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
+# Каталоги, где обломки прошлого запуска уже убраны. Повторный listdir
+# на каждой записи сессии только тормозит.
+_swept_dirs = set()
 # Путь -> (размер, время). Совпадает — файл с той проверки не подменяли,
 # и его можно копировать в .bak. Иначе битая версия затёрла бы запасную.
 _known_good = {}
@@ -95,12 +100,16 @@ def read_text(path):
     return text
 
 
-def write_text(path, text, backup=False, backup_interval=30, newline='\n'):
+def write_text(path, text, backup=False, backup_interval=30, newline='\n', sync=True):
     """Записать текст целиком. backup — освежать path.bak не чаще interval секунд.
 
     interval 0 обновляет запасную копию при каждой записи. Копия снимается
     только с файла, который раньше успешно прочитан или записан: битый
     основной файл не затирает ещё живой .bak.
+
+    sync=False не вызывает fsync: атомарная замена имени уже не оставляет
+    обрезанный файл на месте прежнего. Так пишется сессия, которую обновляют
+    часто. Сохранение документа оставляет sync=True.
     """
     if not isinstance(text, str):
         raise TypeError('text')
@@ -108,14 +117,15 @@ def write_text(path, text, backup=False, backup_interval=30, newline='\n'):
     directory = os.path.dirname(path)
     with _lock:
         os.makedirs(directory, exist_ok=True)
-        _sweep_temps(directory)
+        _sweep_once(directory)
         fd, temporary = tempfile.mkstemp(prefix='.mdv-', suffix='.tmp', dir=directory)
         replaced = False
         try:
             with os.fdopen(fd, 'w', encoding='utf-8', newline=newline) as handle:
                 handle.write(text)
                 handle.flush()
-                os.fsync(handle.fileno())
+                if sync:
+                    os.fsync(handle.fileno())
             if backup:
                 _backup_previous(path, backup_interval)
             os.replace(temporary, path)
@@ -184,15 +194,24 @@ def _copy_atomic(src, dest):
                 pass
 
 
+def _sweep_once(directory):
+    """Вызывается уже под _lock. Каталог обходится один раз за запуск."""
+    if directory in _swept_dirs:
+        return
+    if _sweep_temps(directory):
+        _swept_dirs.add(directory)
+
+
 def _sweep_temps(directory):
     """Временные файлы прошлого оборванного запуска. Живой записи в этот момент нет."""
     try:
         names = os.listdir(directory)
     except OSError:
-        return
+        return False
     for name in names:
         if name.startswith('.mdv-') and name.endswith('.tmp'):
             try:
                 os.remove(os.path.join(directory, name))
             except OSError:
                 pass
+    return True

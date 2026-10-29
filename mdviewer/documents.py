@@ -203,12 +203,6 @@ def _commit_slot_snapshot(slot, bundle):
         _publish_locked()
 
 
-def publish_sessions():
-    """Одна сессия на все окна: при следующем запуске открывается одно окно."""
-    with _publish_lock:
-        _publish_locked()
-
-
 def forget_window_session():
     """У этого окна больше нет вкладок, которые надо помнить."""
     state.persist_session = False
@@ -546,35 +540,6 @@ def _write_editor_content_unlocked(path):
     else:
         call_js('markSavedIfUnchanged', revision)
     return True
-
-
-def install_launch_tabs(payload):
-    """Открыть вкладки, которые перенесли в новое окно. Они уже прочитаны."""
-    tabs = payload.get('tabs') if isinstance(payload, dict) else None
-    if not isinstance(tabs, list) or not tabs:
-        show_welcome()
-        return
-    try:
-        active = int(payload.get('active') or 0)
-    except (TypeError, ValueError):
-        active = 0
-    if active < 0 or active >= len(tabs):
-        active = 0
-    _suspend_session()
-    try:
-        call_js('installTabs', {'tabs': tabs, 'active': active})
-        current = tabs[active] if isinstance(tabs[active], dict) else {}
-        html = bool(current.get('html'))
-        path = current.get('path')
-        if not isinstance(path, str) or not path:
-            path = None
-        state.html_mode = html
-        state.opened_path = path
-        state.current_file = None if html else path
-        state.persist_session = True
-        _show_document_name(current.get('title') or UNTITLED)
-    finally:
-        _resume_session(True)
 
 
 def _bundle_from_drag_spec(spec):

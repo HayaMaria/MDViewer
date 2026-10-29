@@ -744,7 +744,7 @@
     if (detachBusy) return;
     detachBusy = true;
     var spec = exportTab(tab);
-    callApi('resolve_tab_drop', screenX, screenY).then(function (hit) {
+    callApi('resolve_tab_drop').then(function (hit) {
       if (hit && hit.windowId && hit.windowId !== window.__windowId) {
         return callApi('deliver_tab', hit.windowId, spec, hit.index).then(function (ok) {
           if (!ok) return false;

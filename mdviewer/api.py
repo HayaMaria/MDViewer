@@ -346,11 +346,11 @@ class Api:
         from .drag_ghost import hide
         hide(token)
 
-    def resolve_tab_drop(self, screen_x=None, screen_y=None):
+    def resolve_tab_drop(self):
         """Куда попадает курсор: другое окно или None, если это свободное место."""
         return _foreign_drop(fresh=True)
 
-    def preview_foreign_drop(self, screen_x=None, screen_y=None):
+    def preview_foreign_drop(self):
         hit = _foreign_drop()
         me = state.active_slot()
         mark = None

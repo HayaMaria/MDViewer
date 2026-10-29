@@ -702,24 +702,6 @@ function showEditorMenu(view, x, y) {
   placeMenu(view, pos == null ? 0 : pos, { x, y });
 }
 
-function spellTargetAt(x, y) {
-  const view = editorView;
-  if (!enabled || !view || !checkersReady()) return null;
-  let pos = view.posAtCoords({ x, y });
-  if (pos == null) {
-    const el = document.elementFromPoint(x, y);
-    const span = el && el.closest ? el.closest(".cm-spell-error") : null;
-    if (!span) return null;
-    const rect = span.getBoundingClientRect();
-    pos = view.posAtCoords({ x: rect.left + 1, y: rect.top + rect.height / 2 });
-  }
-  const plugin = view.plugin(spellPlugin);
-  if (pos == null || !plugin) return null;
-  const mark = plugin.markAt(pos);
-  if (!mark) return null;
-  return { view, mark };
-}
-
 function showMenu(view, mark, point) {
   const panel = ensureMenu();
   panel.replaceChildren();
@@ -985,33 +967,5 @@ export function bindSpellcheck(view) {
     if (!el || !view.dom.contains(el)) return false;
     showEditorMenu(view, x, y);
     return true;
-  };
-
-  window.spellMenuInfo = function (x, y) {
-    const hit = spellTargetAt(x, y);
-    if (!hit) return null;
-    return {
-      word: hit.mark.word,
-      from: hit.mark.from,
-      to: hit.mark.to,
-      suggestions: suggest(hit.mark.word),
-    };
-  };
-
-  window.spellMenuAction = function (action) {
-    if (!editorView || !action) return;
-    if (action.type === "replace") {
-      replaceWord(editorView, action.from, action.to, action.word, action.text);
-    } else if (action.type === "skip") {
-      skipWord(action.word);
-    } else if (action.type === "add") {
-      rememberUserWord(action.word);
-    }
-  };
-
-  window.spellShowMenu = function (x, y) {
-    const hit = spellTargetAt(x, y);
-    if (!hit) return;
-    showMenu(hit.view, hit.mark, { x: x, y: y });
   };
 }

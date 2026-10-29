@@ -6,6 +6,7 @@
   var paused = false;
   var textTimer = null;
   var placeTimer = null;
+  var PLACE_SAVE_MS = 4000;
 
   function clearSessionTimers() {
     if (textTimer) {
@@ -191,8 +192,8 @@
     if (snapshot) callApi('save_session', snapshot);
   }
 
-  // Текст — вскоре после правки. Курсор и прокрутка — реже и без копии текста:
-  // Python оставляет уже записанный черновик.
+  // Текст — вскоре после правки. Курсор и прокрутка — раз в несколько секунд
+  // и сразу, когда окно теряет фокус. Python оставляет уже записанный черновик.
   function scheduleSessionSave(kind) {
     if (paused) return;
     if (!keepSession() && (!tracking || window.__htmlMode)) return;
@@ -213,12 +214,17 @@
     placeTimer = setTimeout(function () {
       placeTimer = null;
       flushSession(false);
-    }, 1000);
+    }, PLACE_SAVE_MS);
   }
 
-  window.scheduleSessionSave = function () {
-    scheduleSessionSave('text');
-  };
+  function flushPendingSession() {
+    var includeContent = !!textTimer;
+    if (!textTimer && !placeTimer) return;
+    clearSessionTimers();
+    flushSession(includeContent);
+  }
+
+  window.addEventListener('blur', flushPendingSession);
 
   var prevCursor = window.updateStatusBarCursor;
   window.updateStatusBarCursor = function (line, col) {
