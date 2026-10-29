@@ -265,7 +265,9 @@ def save_session(record, path=None):
             return
         # Запасная копия — предыдущая удачная сессия, не чаще раза в полминуты:
         # курсор пишется часто, а черновик может быть большим.
-        durable.write_text(path, payload, backup=True, backup_interval=30, newline='\n')
+        durable.write_text(
+            path, payload, backup=True, backup_interval=30, newline='\n', sync=False,
+        )
         if path == SESSION_PATH:
             _last_written = payload
 

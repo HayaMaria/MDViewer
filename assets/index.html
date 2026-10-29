@@ -147,6 +147,13 @@
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
+      <button class="fmt-btn" title="Цитата" onclick="toggleBlockquote()">❝</button>
+      <button class="fmt-btn" title="Маркированный список" onclick="toggleBulletList()">•</button>
+      <button class="fmt-btn" title="Нумерованный список" onclick="toggleOrderedList()">1.</button>
+      <button class="fmt-btn" title="Задачи" onclick="toggleTaskList()">☐</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
       <button class="fmt-btn" title="По центру" onclick="toggleAlign('center')">
         <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
           <rect x="1" y="2" width="14" height="1.7" rx="0.4" />
@@ -164,28 +171,21 @@
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
-      <button class="fmt-btn" title="Цитата" onclick="toggleBlockquote()">❝</button>
-      <button class="fmt-btn" title="Маркированный список" onclick="toggleBulletList()">•</button>
-      <button class="fmt-btn" title="Нумерованный список" onclick="toggleOrderedList()">1.</button>
-      <button class="fmt-btn" title="Задачи" onclick="toggleTaskList()">☐</button>
-    </div>
-    <div class="fmt-sep"></div>
-    <div class="fmt-group">
       <button class="fmt-btn" title="Ссылка" onclick="insertLink()">🔗</button>
       <button class="fmt-btn" title="Изображение" onclick="insertImage()">🖼</button>
-    </div>
-    <div class="fmt-sep"></div>
-    <div class="fmt-group">
-      <button class="fmt-btn" title="Блок кода (```)" onclick="toggleCodeBlock()">{ }</button>
-      <button class="fmt-btn" title="Горизонтальная черта (---)" onclick="insertHorizontalRule()">—</button>
-      <button class="fmt-btn" title="Пустая строка (Ctrl+Shift+Enter)" onclick="insertBlankParagraph()">↵</button>
       <button class="fmt-btn" title="Таблица" onclick="openTableConfig()">⊞</button>
     </div>
     <div class="fmt-sep"></div>
     <div class="fmt-group">
+      <button class="fmt-btn" title="Блок кода (```)" onclick="toggleCodeBlock()">{ }</button>
       <button class="fmt-btn" title="Mermaid-диаграмма" onclick="openMermaidConfig()">◇</button>
       <button class="fmt-btn" title="UML-диаграмма" onclick="openUmlConfig()">◉</button>
       <button class="fmt-btn" title="Chart.js график" onclick="openChartConfig()">📊</button>
+    </div>
+    <div class="fmt-sep"></div>
+    <div class="fmt-group">
+      <button class="fmt-btn" title="Горизонтальная черта (---)" onclick="insertHorizontalRule()">—</button>
+      <button class="fmt-btn" title="Пустая строка (Ctrl+Shift+Enter)" onclick="insertBlankParagraph()">↵</button>
     </div>
   </div>
 

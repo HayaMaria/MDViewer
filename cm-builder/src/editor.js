@@ -632,6 +632,8 @@ function ensureNomnoml() {
 // Очередь схем вне экрана: по одной за кадр, чтобы первое открытие не замирало.
 const diagramQueue = [];
 let diagramPump = 0;
+// Смена темы отменяет уже начатую отрисовку: она ещё в старых цветах.
+let diagramGeneration = 0;
 
 function nearPreview(el) {
   const preview = document.getElementById("preview");
@@ -652,7 +654,9 @@ function rememberMermaid(el) {
 
 function paintMermaid(nodes) {
   if (!nodes.length) return Promise.resolve();
+  const generation = diagramGeneration;
   return ensureMermaid().then((api) => {
+    if (generation !== diagramGeneration) return;
     const fresh = [];
     nodes.forEach((el) => {
       if (!el.isConnected) return;
@@ -670,6 +674,13 @@ function paintMermaid(nodes) {
     });
     if (!fresh.length || !api) return;
     return Promise.resolve(api.run({ nodes: fresh })).catch(() => { }).then(() => {
+      if (generation !== diagramGeneration) {
+        fresh.forEach((el) => {
+          if (el.isConnected) enqueueDiagram(el);
+        });
+        pumpDiagrams();
+        return;
+      }
       fresh.forEach((el) => {
         if (el.isConnected) rememberMermaid(el);
       });
@@ -678,8 +689,9 @@ function paintMermaid(nodes) {
 }
 
 function paintChart(el) {
+  const generation = diagramGeneration;
   return ensureChart().then(() => {
-    if (!el.isConnected) return;
+    if (generation !== diagramGeneration || !el.isConnected) return;
     const code = decodeURIComponent(el.dataset.chartCode || "");
     if (!code) return;
     const w = diagramTargetWidth(el);
@@ -692,6 +704,7 @@ function paintChart(el) {
 }
 
 function paintNomnoml(el) {
+  const generation = diagramGeneration;
   const code = decodeURIComponent(el.dataset.nomnomlCode || "");
   if (!code || !el.isConnected) return Promise.resolve();
   const key = makeDiagramSignature("nomnoml", code, true);
@@ -702,7 +715,7 @@ function paintNomnoml(el) {
     return Promise.resolve();
   }
   return ensureNomnoml().then(() => {
-    if (!el.isConnected || typeof window.renderNomnoml !== "function") return;
+    if (generation !== diagramGeneration || !el.isConnected || typeof window.renderNomnoml !== "function") return;
     try {
       window.renderNomnoml(el, code);
       if (el.innerHTML.indexOf("<svg") !== -1) {
@@ -747,6 +760,19 @@ function enqueueDiagram(el) {
   if (diagramQueue.indexOf(el) === -1) diagramQueue.push(el);
 }
 
+function dequeueDiagram(el) {
+  const index = diagramQueue.indexOf(el);
+  if (index !== -1) diagramQueue.splice(index, 1);
+}
+
+window.refreshDiagramTheme = function () {
+  diagramGeneration += 1;
+  mermaidThemeApplied = null;
+  const preview = document.getElementById("preview");
+  if (!preview) return;
+  drawDiagrams([preview]);
+};
+
 window.rerenderMermaidTheme = function () {
   mermaidThemeApplied = null;
   const nodes = Array.from(document.querySelectorAll("#preview .mermaid"));
@@ -776,8 +802,10 @@ function drawDiagrams(roots) {
 
   const now = [];
   nodes.forEach((el) => {
-    if (nearPreview(el)) now.push(el);
-    else enqueueDiagram(el);
+    if (nearPreview(el)) {
+      dequeueDiagram(el);
+      now.push(el);
+    } else enqueueDiagram(el);
   });
   pumpDiagrams();
   const mermaids = now.filter((el) => el.classList.contains("mermaid"));
@@ -991,33 +1019,59 @@ const searchTextField = StateField.define({
 const searchMatchMark = Decoration.mark({ class: "cm-searchMatch" });
 const searchMatchSelectedMark = Decoration.mark({ class: "cm-searchMatch cm-searchMatch-selected" });
 
-function computeSearchMatches(view) {
-  const text = view.state.field(searchTextField);
-  if (!text || view.state.doc.length === 0) return Decoration.none;
+// Один проход по документу на запрос. Документ CodeMirror неизменяем,
+// поэтому повтор подсветки, перехода и счётчика берёт тот же список.
+let searchMatchCache = { query: "", doc: null, positions: [] };
 
+function scanSearchMatches(text) {
+  if (!text) return [];
+  const doc = view.state.doc.toString();
+  const positions = [];
   let re;
   try {
     re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
   } catch (e) {
-    return Decoration.none;
+    return [];
   }
+  let m;
+  while ((m = re.exec(doc)) !== null) {
+    positions.push([m.index, m.index + m[0].length]);
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  return positions;
+}
+
+function searchPositions(text) {
+  if (!text) return [];
+  const doc = view.state.doc;
+  if (searchMatchCache.query === text && searchMatchCache.doc === doc) {
+    return searchMatchCache.positions;
+  }
+  const positions = scanSearchMatches(text);
+  searchMatchCache = { query: text, doc, positions };
+  return positions;
+}
+
+function computeSearchMatches(view) {
+  const text = view.state.field(searchTextField);
+  if (!text || view.state.doc.length === 0) return Decoration.none;
+
+  const positions = searchPositions(text);
+  if (!positions.length) return Decoration.none;
 
   const builder = new RangeSetBuilder();
-  const doc = view.state.doc;
   const sel = view.state.selection;
+  let index = 0;
 
   for (const range of view.visibleRanges) {
-    const from = range.from, to = range.to;
-    const textSlice = doc.sliceString(from, to);
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(textSlice)) !== null) {
-      const mFrom = from + m.index;
-      const mTo = mFrom + m[0].length;
-      if (mTo > to) break;
-      const selected = sel.ranges.some(r => r.from === mFrom && r.to === mTo);
-      builder.add(mFrom, mTo, selected ? searchMatchSelectedMark : searchMatchMark);
-      if (m[0].length === 0) re.lastIndex++;
+    while (index < positions.length && positions[index][1] <= range.from) index++;
+    for (let j = index; j < positions.length; j++) {
+      const from = positions[j][0];
+      const to = positions[j][1];
+      if (from >= range.to) break;
+      if (from < range.from || to > range.to) continue;
+      const selected = sel.ranges.some(r => r.from === from && r.to === to);
+      builder.add(from, to, selected ? searchMatchSelectedMark : searchMatchMark);
     }
   }
 
@@ -1325,31 +1379,13 @@ window.searchEditor = function () {
   return true;
 };
 
-// Все позиции совпадений [from, to] по всему документу (единая логика)
-function getAllSearchMatches(text) {
-  if (!text) return [];
-  const doc = view.state.doc.toString();
-  const positions = [];
-  let re;
-  try {
-    re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-  } catch (e) {
-    return [];
-  }
-  let m;
-  while ((m = re.exec(doc)) !== null) {
-    positions.push([m.index, m.index + m[0].length]);
-    if (m[0].length === 0) re.lastIndex++;
-  }
-  return positions;
-}
-
 // Перейти к следующему/предыдущему совпадению. dir: "next" | "prev"
+// Возвращает уже посчитанный список, чтобы счётчик не шёл по документу снова.
 window.findText = function (text, dir) {
-  if (!text) return false;
+  if (!text) return null;
   try {
-    const positions = getAllSearchMatches(text);
-    if (!positions.length) return false;
+    const positions = searchPositions(text);
+    if (!positions.length) return positions;
 
     const sel = view.state.selection.main;
     const head = sel.head;
@@ -1391,10 +1427,10 @@ window.findText = function (text, dir) {
       scrollIntoView: true,
       userEvent: "select.search"
     });
-    return true;
+    return positions;
   } catch (e) {
     console.error("findText error:", e);
-    return false;
+    return null;
   }
 };
 
@@ -1402,7 +1438,7 @@ window.findText = function (text, dir) {
 window.replaceOne = function (text, replacement) {
   if (!text) return false;
   try {
-    const positions = getAllSearchMatches(text);
+    const positions = searchPositions(text);
     if (!positions.length) return false;
 
     const sel = view.state.selection.main;
@@ -1430,7 +1466,7 @@ window.replaceOne = function (text, replacement) {
 window.replaceAllSearch = function (text, replacement) {
   if (!text) return false;
   try {
-    const positions = getAllSearchMatches(text);
+    const positions = searchPositions(text);
     if (!positions.length) return false;
 
     const rep = replacement || "";
@@ -1446,7 +1482,7 @@ window.replaceAllSearch = function (text, replacement) {
 
 // Позиции всех совпадений: массив [from, to]
 window.getSearchMatchPositions = function (text) {
-  return getAllSearchMatches(text);
+  return searchPositions(text);
 };
 
 // Текущая позиция курсора в документе
@@ -2524,12 +2560,15 @@ function hydrateRemoteImages(roots) {
     window.callApi("resolve_image", href).then((result) => {
       if (!img.isConnected) return;
       img.removeAttribute("data-mdv-resolve");
-      if (!result || !result.ok || !result.url || isVideoHref(result.url)) {
+      if (!result || !result.ok) {
         if (!isVideoHref(href)) img.src = href;
         return;
       }
-      remoteImageCache.set(href, result.url);
-      img.src = result.url;
+      const url = result.url || "";
+      if (url && !isVideoHref(url)) remoteImageCache.set(href, url);
+      const show = result.uri || (url && !isVideoHref(url) ? url : "");
+      if (show) img.src = show;
+      else if (!isVideoHref(href)) img.src = href;
     }, () => {
       if (img.isConnected && !isVideoHref(href)) img.src = href;
     });

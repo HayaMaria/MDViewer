@@ -11,19 +11,8 @@
     document.documentElement.setAttribute('data-theme', window.getCurrentTheme());
 
     window.applyChartTheme(dark);
-    if (window.rerenderMermaidTheme) window.rerenderMermaidTheme();
-    document.querySelectorAll("#preview [id^='chart-']").forEach(function (el) {
-      var code = decodeURIComponent(el.dataset.chartCode || '');
-      if (code && window.Chart) window.renderChart(code, el.id);
-    });
-    document.querySelectorAll('#preview .nomnoml-diagram').forEach(function (el) {
-      var code = decodeURIComponent(el.dataset.nomnomlCode || '');
-      if (code && window.nomnoml) {
-        window.renderNomnoml(el, code);
-        if (window.noteNomnomlSvg) window.noteNomnomlSvg(el, code);
-        if (window.scaleDiagramSvg) window.scaleDiagramSvg(el);
-      }
-    });
+    if (window.refreshDiagramTheme) window.refreshDiagramTheme();
+    else if (window.rerenderMermaidTheme) window.rerenderMermaidTheme();
 
     callApi('apply_titlebar_theme', dark);
   };

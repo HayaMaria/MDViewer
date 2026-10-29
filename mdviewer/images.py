@@ -36,8 +36,48 @@ _MIME_ALIASES = {
 _cache_lock = threading.Lock()
 # path -> (mtime_ns, size, data_uri)
 _preview_cache = {}
-# исходный адрес -> прямой адрес картинки
+# исходный адрес -> (прямой адрес, data_uri уже скачанных байт)
 _resolve_cache = {}
+
+
+def _local_stamp(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+def _cached_local_uri(path, stamp):
+    with _cache_lock:
+        cached = _preview_cache.get(path)
+    if cached and cached[0] == stamp[0] and cached[1] == stamp[1]:
+        return cached[2]
+    return None
+
+
+def _store_local(path, stamp, uri):
+    with _cache_lock:
+        _preview_cache[path] = (stamp[0], stamp[1], uri)
+
+
+def _cached_remote(href):
+    with _cache_lock:
+        cached = _resolve_cache.get(href)
+    if not cached or not cached[1]:
+        return None
+    return cached
+
+
+def _store_remote(href, loaded):
+    """Запомнить байты, чтобы превью и экспорт не качали тот же адрес снова."""
+    kind, data, final = loaded
+    uri = _data_uri(kind, data)
+    with _cache_lock:
+        _resolve_cache[href] = (final, uri)
+        if final and final != href:
+            _resolve_cache[final] = (final, uri)
+    return uri
 
 
 def preview_image(href, known_mtime=''):
@@ -45,52 +85,64 @@ def preview_image(href, known_mtime=''):
     path = local_path(href)
     if not path or not os.path.isfile(path):
         return {'ok': False}
-    try:
-        stat = os.stat(path)
-    except OSError:
+    stamp = _local_stamp(path)
+    if stamp is None:
         return {'ok': False}
-    stamp = str(stat.st_mtime_ns)
-    with _cache_lock:
-        cached = _preview_cache.get(path)
-    if cached and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
-        if str(known_mtime or '') == stamp:
-            return {'ok': True, 'unchanged': True, 'mtime': stamp}
-        return {'ok': True, 'unchanged': False, 'mtime': stamp, 'uri': cached[2]}
+    stamp_text = str(stamp[0])
+    uri = _cached_local_uri(path, stamp)
+    if uri is not None:
+        if str(known_mtime or '') == stamp_text:
+            return {'ok': True, 'unchanged': True, 'mtime': stamp_text}
+        return {'ok': True, 'unchanged': False, 'mtime': stamp_text, 'uri': uri}
     loaded = _read_file(path)
     if loaded is None:
         return {'ok': False}
     uri = _data_uri(loaded[0], loaded[1])
-    with _cache_lock:
-        _preview_cache[path] = (stat.st_mtime_ns, stat.st_size, uri)
-    return {'ok': True, 'unchanged': False, 'mtime': stamp, 'uri': uri}
+    _store_local(path, stamp, uri)
+    return {'ok': True, 'unchanged': False, 'mtime': stamp_text, 'uri': uri}
 
 
 def embed_image(href):
     """Байты картинки для HTML. ok=False — экспорт надо остановить."""
     if is_remote(href):
-        loaded = _load_remote(href.strip())
-    else:
-        path = local_path(href)
-        loaded = _read_file(path) if path else None
+        href = href.strip()
+        cached = _cached_remote(href)
+        if cached:
+            return {'ok': True, 'uri': cached[1]}
+        loaded = _load_remote(href)
+        if loaded is None:
+            return {'ok': False}
+        return {'ok': True, 'uri': _store_remote(href, loaded)}
+    path = local_path(href)
+    if not path:
+        return {'ok': False}
+    stamp = _local_stamp(path)
+    if stamp is not None:
+        uri = _cached_local_uri(path, stamp)
+        if uri is not None:
+            return {'ok': True, 'uri': uri}
+    loaded = _read_file(path)
     if loaded is None:
         return {'ok': False}
-    return {'ok': True, 'uri': _data_uri(loaded[0], loaded[1])}
+    uri = _data_uri(loaded[0], loaded[1])
+    if stamp is not None:
+        _store_local(path, stamp, uri)
+    return {'ok': True, 'uri': uri}
 
 
 def resolve_image(href):
-    """Прямой адрес картинки. Короткая ссылка на страницу раскрывается через og:image."""
+    """Прямой адрес картинки и её байты. Короткая ссылка раскрывается через og:image."""
     href = str(href or '').strip()
     if not is_remote(href):
         return {'ok': False}
-    with _cache_lock:
-        cached = _resolve_cache.get(href)
+    cached = _cached_remote(href)
     if cached:
-        return {'ok': True, 'url': cached}
+        return {'ok': True, 'url': cached[0], 'uri': cached[1]}
     loaded = _load_remote(href)
     if loaded is None:
         return {'ok': False}
-    _remember_remote(href, loaded[2])
-    return {'ok': True, 'url': loaded[2]}
+    uri = _store_remote(href, loaded)
+    return {'ok': True, 'url': loaded[2], 'uri': uri}
 
 
 def is_remote(href):
@@ -151,13 +203,6 @@ def _load_remote(url, depth=0):
     if not page:
         return None
     return _load_remote(page, depth + 1)
-
-
-def _remember_remote(href, url):
-    if not href or not url:
-        return
-    with _cache_lock:
-        _resolve_cache[href] = url
 
 
 def _open_remote(url):

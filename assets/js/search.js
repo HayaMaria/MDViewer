@@ -26,10 +26,10 @@
   }
 
   // «номер текущего / всего» — текущим считается совпадение под курсором
-  function updateCount() {
+  function updateCount(positions) {
     var q = searchInput.value;
     if (!q) { countEl.textContent = ''; return; }
-    var positions = window.getSearchMatchPositions(q);
+    if (!positions) positions = window.getSearchMatchPositions(q);
     if (!positions.length) { countEl.textContent = '0 / 0'; return; }
     var head = window.getSearchCursorPos();
     // Совпадение, на котором стоит курсор, либо ближайшее позади него.
@@ -44,8 +44,7 @@
 
   function find(dir) {
     if (!searchInput.value) return;
-    window.findText(searchInput.value, dir);
-    updateCount();
+    updateCount(window.findText(searchInput.value, dir));
   }
 
   function closeOnEscape(e) {
