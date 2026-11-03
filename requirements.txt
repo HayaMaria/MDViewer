@@ -1,1 +1,10 @@
-pywebview>=6.0.0
+# Зависимости приложения. Версии закреплены: код опирается на внутренние детали
+# pywebview и pythonnet, поэтому обновлять их только вручную, с проверкой.
+pywebview==6.2.1
+pythonnet==3.1.0
+clr_loader==0.3.1
+bottle==0.13.4
+proxy_tools==0.1.0
+cffi==2.1.1
+pycparser==3.0
+typing_extensions==4.16.0

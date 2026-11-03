@@ -1,10 +1,12 @@
 import logging
 import os
+import sys
 import wsgiref.simple_server
 
 import bottle
 import webview
 
+from mdviewer import logs
 from mdviewer.paths import ICON_PATH
 from mdviewer.state import state
 from mdviewer.win.associate import get_startup_file_path, register_file_associations
@@ -96,6 +98,7 @@ def silence_http_server_logs():
 
 
 def main():
+    logs.setup()
     # debug=True нужен, чтобы Tab/Shift+Tab доходили до JS (AreBrowserAcceleratorKeysEnabled),
     # но DevTools при этом открываться не должны
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
@@ -103,10 +106,12 @@ def main():
     os.environ['PYWEBVIEW_LOG'] = 'WARNING'
     silence_http_server_logs()
 
-    try:
-        register_file_associations()
-    except OSError:
-        pass
+    # Только из собранного exe: при запуске из исходников .md привязался бы к python.exe app.py
+    if getattr(sys, 'frozen', False):
+        try:
+            register_file_associations()
+        except OSError:
+            logging.getLogger(__name__).warning('Не удалось записать ассоциации файлов', exc_info=True)
 
     if ICON_PATH.is_file():
         webview._state['icon'] = str(ICON_PATH)
