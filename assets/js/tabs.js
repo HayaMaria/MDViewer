@@ -659,10 +659,11 @@
     return document.documentElement.getAttribute('data-theme') !== 'light';
   }
 
+  // Обещание исполняется, когда плашка уже на экране (или показать её не вышло)
   function showChip(tab) {
     var serial = ++chipSerial;
     chipToken = 0;
-    callApi('show_drag_ghost', tab.title || '', themeIsDark()).then(function (token) {
+    return callApi('show_drag_ghost', tab.title || '', themeIsDark()).then(function (token) {
       if (serial !== chipSerial) {
         if (token) callApi('hide_drag_ghost', token);
         return;
@@ -794,7 +795,10 @@
         solo = tabs.length === 1;
         item.classList.add('dragging');
         document.body.classList.add('tab-dragging');
-        showChip(tab);
+        showChip(tab).then(function () {
+          chipReady = true;
+          if (!ended) scheduleForeignMark();
+        });
       }
       var onBar = overOwnTabBar(e.clientX, e.clientY);
       if (onBar) {
@@ -839,10 +843,13 @@
     var foreignMark = false;
     var foreignBusy = false;
     var foreignAt = 0;
+    // Поиск чужих окон занимает поток окон. Пока плашка не показана, он вставал
+    // перед ней в очередь, и у одиночной вкладки плашка появлялась с опозданием.
+    var chipReady = false;
 
     function scheduleForeignMark() {
       var now = Date.now();
-      if (!dragging || foreignBusy || now - foreignAt < 80) return;
+      if (!dragging || !chipReady || foreignBusy || now - foreignAt < 80) return;
       foreignAt = now;
       foreignBusy = true;
       foreignMark = true;
