@@ -39,8 +39,8 @@ def _slot_by_root(root):
     return None
 
 
-def _slot_at_cursor():
-    """Переднее окно редактора под курсором. Плашка переноса пропускается."""
+def _slot_at_cursor(skip=None):
+    """Переднее окно редактора под курсором. Плашка переноса и окно skip пропускаются."""
     import ctypes
 
     from .drag_ghost import ghost_hwnd
@@ -70,7 +70,7 @@ def _slot_at_cursor():
             if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
                 if rect.l <= x < rect.r and rect.t <= y < rect.b:
                     slot = _slot_by_root(current)
-                    if slot is not None:
+                    if slot is not None and slot is not skip:
                         return slot
         hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
     return None
@@ -119,13 +119,15 @@ def _client_point(slot):
 _last_hit = {'key': None, 'info': None}
 
 
-def _foreign_drop(fresh=False):
+def _foreign_drop(fresh=False, see_past_own=False):
     """Другое окно под курсором. Над панелью вкладок — место вставки, иначе конец списка.
 
-    None — курсор на своём окне или на пустом месте.
+    None — курсор на своём окне или на пустом месте. see_past_own — смотреть
+    сквозь своё окно: у окна с одной вкладкой бросить её в себя нельзя, а под
+    ним часто лежит окно, куда её хотят вернуть.
     """
-    slot = _slot_at_cursor()
     me = state.active_slot()
+    slot = _slot_at_cursor(skip=me if see_past_own else None)
     if slot is None or slot is me or slot.window is None:
         _last_hit['key'] = None
         _last_hit['info'] = None
@@ -355,12 +357,12 @@ class Api:
         from .drag_ghost import hide
         hide(token)
 
-    def resolve_tab_drop(self):
+    def resolve_tab_drop(self, see_past_own=False):
         """Куда попадает курсор: другое окно или None, если это свободное место."""
-        return _foreign_drop(fresh=True)
+        return _foreign_drop(fresh=True, see_past_own=bool(see_past_own))
 
-    def preview_foreign_drop(self):
-        hit = _foreign_drop()
+    def preview_foreign_drop(self, see_past_own=False):
+        hit = _foreign_drop(see_past_own=bool(see_past_own))
         me = state.active_slot()
         mark = None
         if hit and hit.get('onBar'):
@@ -370,7 +372,7 @@ class Api:
             return
         _last_hit['mark'] = mark
         for slot in state.iter_slots():
-            if slot is me or slot.window is None:
+            if slot is me or slot.window is None or slot.closed:
                 continue
             if mark and slot.id == mark[0]:
                 script = 'showTabDrop(%d)' % mark[1]
@@ -387,7 +389,7 @@ class Api:
         _last_hit['mark'] = None
         me = state.active_slot()
         for slot in state.iter_slots():
-            if slot is me or slot.window is None:
+            if slot is me or slot.window is None or slot.closed:
                 continue
             try:
                 slot.window.evaluate_js('clearTabDrop()')

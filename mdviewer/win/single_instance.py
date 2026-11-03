@@ -7,7 +7,9 @@
 """
 import ctypes
 import getpass
+import hashlib
 import logging
+import os
 import threading
 import time
 from multiprocessing import AuthenticationError
@@ -21,11 +23,16 @@ _SW_RESTORE = 9
 
 
 def _address():
+    # Одна копия на папку настроек: копии с разными %APPDATA% (тесты, другой
+    # пользователь) пишут каждая свою сессию и друг другу не мешают.
+    from ..config import CONFIG_DIR
+
     try:
         user = getpass.getuser()
     except Exception:
         user = 'user'
-    return rf'\\.\pipe\MDViewer-{user}'
+    folder = os.path.normcase(os.path.abspath(CONFIG_DIR)).encode('utf-8')
+    return rf'\\.\pipe\MDViewer-{user}-{hashlib.sha1(folder).hexdigest()[:12]}'
 
 
 def claim():

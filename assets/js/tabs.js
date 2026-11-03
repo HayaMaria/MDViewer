@@ -740,11 +740,15 @@
     return true;
   };
 
-  function finishOutsideDrop(tab, screenX, screenY) {
+  // solo — в окне одна эта вкладка. Переносится она так же, как любая другая, но
+  // смотрим сквозь своё окно: под ним часто лежит окно, куда её хотят вернуть.
+  // Своя полоса вкладок важнее: вернули вкладку на неё — передумали, она остаётся.
+  function finishOutsideDrop(tab, screenX, screenY, solo, onOwnBar) {
     if (detachBusy) return;
+    if (solo && onOwnBar) return;
     detachBusy = true;
     var spec = exportTab(tab);
-    callApi('resolve_tab_drop').then(function (hit) {
+    callApi('resolve_tab_drop', !!solo).then(function (hit) {
       if (hit && hit.windowId && hit.windowId !== window.__windowId) {
         return callApi('deliver_tab', hit.windowId, spec, hit.index).then(function (ok) {
           if (!ok) return false;
@@ -778,6 +782,7 @@
     var startY = event.clientY;
     var dragging = false;
     var ended = false;
+    var solo = false;
     var last = { clientX: startX, clientY: startY, screenX: event.screenX, screenY: event.screenY };
 
     function move(e) {
@@ -786,13 +791,16 @@
       if (!dragging) {
         if (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4) return;
         dragging = true;
+        solo = tabs.length === 1;
         item.classList.add('dragging');
         document.body.classList.add('tab-dragging');
         showChip(tab);
       }
       var onBar = overOwnTabBar(e.clientX, e.clientY);
       if (onBar) {
-        placeDropMark(rawInsertIndex(e.clientX));
+        // Одиночной вкладке переставляться в своей полосе некуда, но метка
+        // у чужого окна гаснет: отпустят здесь — вкладка останется на месте
+        if (!solo) placeDropMark(rawInsertIndex(e.clientX));
         if (foreignMark) {
           foreignMark = false;
           callApi('clear_foreign_drops');
@@ -820,11 +828,12 @@
       var point = e && typeof e.clientX === 'number' ? e : last;
       var from = tabs.indexOf(tab);
       if (from < 0) return;
-      if (overOwnTabBar(point.clientX, point.clientY)) {
+      var onOwnBar = overOwnTabBar(point.clientX, point.clientY);
+      if (onOwnBar && !solo) {
         reorderTab(from, rawInsertIndex(point.clientX));
         return;
       }
-      finishOutsideDrop(tab, point.screenX, point.screenY);
+      finishOutsideDrop(tab, point.screenX, point.screenY, solo, onOwnBar);
     }
 
     var foreignMark = false;
@@ -837,7 +846,7 @@
       foreignAt = now;
       foreignBusy = true;
       foreignMark = true;
-      callApi('preview_foreign_drop').then(function () {
+      callApi('preview_foreign_drop', solo).then(function () {
         foreignBusy = false;
       }, function () {
         foreignBusy = false;
