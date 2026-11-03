@@ -35,9 +35,31 @@ def _webview_controller(control):
     return field.GetValue(control)
 
 
-def _keep_ctrl_u_for_editor():
-    # debug=True включает браузерные сочетания WebView, и Ctrl+U открывает исходный код
-    # страницы, не доходя до редактора. Отменяем только это сочетание и вызываем подчёркивание.
+# Виртуальные коды клавиш Windows
+_VK_U = 0x55
+_VK_ZERO = (0x30, 0x60)       # 0 в основном ряду и на цифровой клавиатуре
+_VK_PLUS = (0xBB, 0x6B)       # =/+ в основном ряду и + на цифровой клавиатуре
+_VK_MINUS = (0xBD, 0x6D)      # - в основном ряду и на цифровой клавиатуре
+
+
+def _shortcut_script(vk, shift):
+    """JS для перехваченного сочетания с Ctrl или None, если сочетание не наше."""
+    if vk == _VK_U and not shift:
+        return 'if(!window.__htmlMode&&window.toggleUnderline)window.toggleUnderline()'
+    # Ctrl+плюс/минус/0 вместо масштаба страницы меняют шрифт редактора.
+    # Shift допускаем: на основном ряду «+» набирается как Shift+=.
+    if vk in _VK_PLUS:
+        return 'if(window.stepEditorFontSize)window.stepEditorFontSize(1)'
+    if vk in _VK_MINUS:
+        return 'if(window.stepEditorFontSize)window.stepEditorFontSize(-1)'
+    if vk in _VK_ZERO and not shift:
+        return 'if(window.stepEditorFontSize)window.stepEditorFontSize(0)'
+    return None
+
+
+def _hook_editor_shortcuts():
+    # debug=True включает браузерные сочетания WebView: Ctrl+U открывает исходный код страницы,
+    # Ctrl+плюс/минус/0 меняют масштаб. Перехватываем их до браузера и отдаём редактору.
     # loaded срабатывает не в UI-потоке, а контроллер WebView2 можно трогать только оттуда.
     slot = state.active_slot()
     key = slot.id if slot is not None else id(state.window)
@@ -54,26 +76,27 @@ def _keep_ctrl_u_for_editor():
             controller = _webview_controller(control)
             from System.Windows.Forms import Control, Keys
         except Exception:
-            logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller', exc_info=True)
+            logging.getLogger(__name__).warning('Горячие клавиши: нет CoreWebView2Controller', exc_info=True)
             return
         if controller is None:
-            logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller')
+            logging.getLogger(__name__).warning('Горячие клавиши: нет CoreWebView2Controller')
             return
 
         def on_accelerator(sender, args):
             try:
-                if int(args.KeyEventKind) != 0 or int(args.VirtualKey) != 0x55:
+                if int(args.KeyEventKind) != 0:
                     return
                 mods = int(Control.ModifierKeys)
-                if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)) or (mods & int(Keys.Shift)):
+                if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)):
+                    return
+                script = _shortcut_script(int(args.VirtualKey), bool(mods & int(Keys.Shift)))
+                if script is None:
                     return
                 args.Handled = True
-                control.CoreWebView2.ExecuteScriptAsync(
-                    'if(!window.__htmlMode&&window.toggleUnderline)window.toggleUnderline()'
-                )
+                control.CoreWebView2.ExecuteScriptAsync(script)
             except Exception:
                 logging.getLogger(__name__).warning(
-                    'Ctrl+U: не удалось вставить подчёркивание', exc_info=True
+                    'Горячие клавиши: не удалось обработать сочетание', exc_info=True
                 )
 
         _accelerator_handlers[key] = on_accelerator
@@ -87,7 +110,7 @@ def _keep_ctrl_u_for_editor():
         else:
             attach()
     except Exception:
-        logging.getLogger(__name__).warning('Ctrl+U: нет CoreWebView2Controller', exc_info=True)
+        logging.getLogger(__name__).warning('Горячие клавиши: нет CoreWebView2Controller', exc_info=True)
 
 
 def silence_http_server_logs():
@@ -116,7 +139,7 @@ def main():
     if ICON_PATH.is_file():
         webview._state['icon'] = str(ICON_PATH)
 
-    loaded_callbacks.append(_keep_ctrl_u_for_editor)
+    loaded_callbacks.append(_hook_editor_shortcuts)
     loaded_callbacks.append(prewarm)
     loaded_callbacks.append(enable_file_drop)
     loaded_callbacks.append(configure_context_menu)

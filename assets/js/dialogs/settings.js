@@ -267,6 +267,31 @@
     });
   };
 
+  // ----- Ctrl+плюс / Ctrl+минус / Ctrl+0 -----
+  // Сочетания ловит Python (app.py) до браузера, иначе WebView меняет масштаб страницы.
+  // delta: +1 / -1, 0 — вернуть размер по умолчанию.
+  var MIN_FONT_SIZE = 10;
+  var MAX_FONT_SIZE = 30;
+  var fontSaveTimer = 0;
+
+  window.stepEditorFontSize = function (delta) {
+    if (window.__htmlMode) return;
+    var current = parseInt(window.__editorFontSize, 10) || DEFAULT_FONT_SIZE;
+    var next = delta === 0 ? DEFAULT_FONT_SIZE : current + delta;
+    next = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
+    if (next === current) return;
+    window.setEditorFontSize(next);
+    // Размер уже сохранён, поэтому «Отмена» в настройках не должна его откатывать
+    savedFontSize = next;
+    document.getElementById('settings-font-size').value = next;
+    document.getElementById('settings-font-size-value').textContent = next + 'px';
+    // Пока клавишу держат, пишем на диск один раз в конце
+    clearTimeout(fontSaveTimer);
+    fontSaveTimer = setTimeout(function () {
+      callApi('set_font_size', next);
+    }, 300);
+  };
+
   // Предпросмотр размера шрифта при перемещении ползунка
   document.getElementById('settings-font-size').addEventListener('input', function () {
     showFontSize(parseInt(this.value, 10) || DEFAULT_FONT_SIZE);

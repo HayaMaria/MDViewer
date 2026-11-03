@@ -39,6 +39,9 @@ MEDIA_SIZE_DEFAULTS = {
 # Ширина колонки просмотра и экспорта. Редактор этой мерой не ограничен.
 COLUMN_WIDTHS = ('reading', 'wide', 'full')
 COLUMN_WIDTH_DEFAULT = 'reading'
+# Размер шрифта редактора, px. Те же границы, что у ползунка в настройках.
+FONT_SIZE_MIN = 10
+FONT_SIZE_MAX = 30
 
 
 def load_config():
@@ -79,6 +82,22 @@ def md_save_dir():
     """Папка по умолчанию для первого сохранения .md (Загрузки, если не задана или удалена)."""
     path = load_config().get('save', {}).get('default_path', '')
     return path if os.path.isdir(path) else downloads_dir()
+
+
+def clamp_font_size(value):
+    """Размер шрифта в границах FONT_SIZE_MIN..FONT_SIZE_MAX, мусор — размер по умолчанию."""
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return DEFAULTS['fontSize']
+    return max(FONT_SIZE_MIN, min(FONT_SIZE_MAX, size))
+
+
+def set_font_size(value):
+    """Сохранить размер шрифта (Ctrl+плюс/минус). Возвращает то, что сохранилось."""
+    size = clamp_font_size(value)
+    set_value('fontSize', size)
+    return size
 
 
 def _clamp_media_size(key, value, fallback):
@@ -204,7 +223,7 @@ def ui_settings():
     config = load_config()
     return {
         'theme': config.get('theme', DEFAULTS['theme']),
-        'font_size': config.get('fontSize', DEFAULTS['fontSize']),
+        'font_size': clamp_font_size(config.get('fontSize', DEFAULTS['fontSize'])),
         'splitter_pos': config.get('splitterPos', DEFAULTS['splitterPos']),
         'sync_scroll': config.get('syncScroll', DEFAULTS['syncScroll']),
         'export': export_settings(config),
@@ -221,7 +240,7 @@ def ui_settings():
 def save_ui_settings(settings):
     """Сохранить значения из диалога «Настройки»."""
     config = load_config()
-    config['fontSize'] = int(settings['font_size'])
+    config['fontSize'] = clamp_font_size(settings.get('font_size'))
     incoming_export = settings.get('export') or {}
     saved_export = {}
     for key, default in EXPORT_DEFAULTS.items():

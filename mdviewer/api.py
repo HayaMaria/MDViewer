@@ -199,6 +199,9 @@ class Api:
         from .win.clipboard import read_text
         return read_text()
 
+    def set_font_size(self, size):
+        return config.set_font_size(size)
+
     def set_theme(self, theme):
         config.set_value('theme', theme)
 
