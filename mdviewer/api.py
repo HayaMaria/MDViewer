@@ -243,13 +243,13 @@ class Api:
     # ===== Документ =====
 
     def open_startup_file(self):
-        """Открыть файл, переданный Проводником. False — файла нет.
+        """Прошлый сеанс и файл, переданный Проводником. False — файла нет.
         Чтение идёт в фоне, чтобы сразу вернуть управление JS."""
         path, state.startup_file = state.startup_file, None
         if not path:
             return False
         from .state import spawn
-        spawn(state.active_slot(), documents.open_path, path)
+        spawn(state.active_slot(), documents.start_with_file, path)
         return True
 
     def restore_last_session(self):
@@ -298,6 +298,9 @@ class Api:
         """Убрать заглушку запуска. Страница зовёт это, когда документ уже нарисован."""
         from .win.splash import dismiss
         dismiss(state.window)
+        slot = state.active_slot()
+        if slot is not None:
+            slot.ready.set()
 
     def save_session(self, snapshot):
         documents.remember_session(snapshot, from_js=True)
@@ -308,6 +311,9 @@ class Api:
 
     def new_document(self):
         documents.new_document()
+
+    def new_window(self):
+        documents.open_new_window()
 
     def open_document(self):
         documents.open_file_dialog()

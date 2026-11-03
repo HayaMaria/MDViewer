@@ -105,6 +105,10 @@ def create_editor_window(launch=None, x=None, y=None):
         finally:
             unbind_slot(token)
 
+    def on_closed():
+        slot.closed = True
+
     window.events.closing += on_closing
+    window.events.closed += on_closed
     window.events.loaded += on_loaded
     return slot

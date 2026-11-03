@@ -210,7 +210,8 @@ def tab_restorable(tab):
     path = tab.get('path')
     if path:
         return os.path.isfile(path)
-    return True
+    # Новый документ без файла и без правок пуст: возвращать нечего.
+    return False
 
 
 def bundle_restorable(data):

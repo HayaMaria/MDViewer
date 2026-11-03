@@ -2,9 +2,9 @@ import { EditorView, basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { ViewPlugin, Decoration, keymap } from "@codemirror/view";
-import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState } from "@codemirror/state";
+import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState, Prec } from "@codemirror/state";
 import { indentUnit } from "@codemirror/language";
-import { defaultKeymap, historyKeymap, undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
+import { undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
 import { applyChartTheme, renderChart } from "./charts.js";
 import { builtinHighlight, codeHighlighting } from "./code-highlight.js";
@@ -983,9 +983,10 @@ function indentSelectedLines(editor) {
 }
 
 // Кастомные биндинги (Mod = Ctrl на Windows/Linux, Cmd на macOS)
-// Должны идти ДО defaultKeymap, чтобы `Mod-s` переопределил стандартный save
+// Подключаются с Prec.high: стандартные сочетания CodeMirror не должны их перебивать
 const customKeyBindings = [
-  { key: "Mod-n", run: apiCommand("new_document") },
+  { key: "Mod-n", run: apiCommand("new_window") },
+  { key: "Mod-t", run: apiCommand("new_document") },
   { key: "Mod-o", run: apiCommand("open_document") },
   { key: "Mod-s", run: apiCommand("save_document") },
   { key: "Mod-Shift-s", run: apiCommand("save_document_as") },
@@ -1134,7 +1135,9 @@ const editorExtensions = [
   oneDarkTheme,
   codeHighlighting,
   builtinHighlight,
-  keymap.of([...customKeyBindings, ...defaultKeymap, ...historyKeymap]),
+  // basicSetup уже несёт defaultKeymap и historyKeymap и стоит раньше, поэтому без
+  // Prec.high его Mod-i (выделить родительский блок) перехватывал наш курсив.
+  Prec.high(keymap.of(customKeyBindings)),
   searchHighlightExt,
   readOnlyCompartment.of(EditorState.readOnly.of(false)),
   spellCompartment.of(spellcheckOff),

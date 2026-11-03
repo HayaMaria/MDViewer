@@ -164,6 +164,18 @@ def test_clean_tab_needs_file(tmp_path):
     assert not session.tab_restorable(md_tab(path=str(tmp_path / 'gone.md')))
 
 
+def test_empty_new_document_is_not_restored():
+    empty = session.normalize_tab(md_tab(title='Новый документ'))
+    assert not session.tab_restorable(empty)
+    assert not session.bundle_restorable({'tabs': [empty]})
+
+
+def test_new_document_with_text_is_restored():
+    typed = session.normalize_tab(md_tab(title='Новый документ', dirty=True, draft='текст'))
+    empty = session.normalize_tab(md_tab(title='Новый документ 2'))
+    assert session.bundle_restorable({'tabs': [empty, typed]})
+
+
 def test_html_tab_needs_file(tmp_path):
     assert not session.tab_restorable({'html': True, 'path': str(tmp_path / 'gone.html')})
 

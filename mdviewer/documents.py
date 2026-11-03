@@ -1,4 +1,5 @@
 """Файловые операции: новый документ, открытие .md/.html, сохранение."""
+import logging
 import os
 import threading
 import time
@@ -16,6 +17,7 @@ HTML_EXTS = ('.html', '.htm')
 OPEN_FILE_TYPES = ('All files (*.*)', 'Markdown files (*.md)', 'HTML files (*.html;*.htm)')
 SAVE_FILE_TYPES = ('Markdown files (*.md)', 'All files (*.*)')
 READ_ONLY_MESSAGE = 'HTML-файл открыт в режиме только для чтения — сохранение недоступно'
+_log = logging.getLogger(__name__)
 _io_lock = threading.Lock()
 _publish_lock = threading.RLock()
 
@@ -445,6 +447,24 @@ def _restore_session(data):
     return True
 
 
+def start_with_file(path):
+    """Запуск с файлом из Проводника: сначала прошлый сеанс, затем файл отдельной вкладкой.
+
+    Раньше файл заменял сессию, и несохранённые вкладки прошлого запуска
+    пропадали при первой же записи сессии.
+    """
+    restored = False
+    data = session.load_session()
+    if session.is_restorable(data):
+        bundle = session.merge_windows(data)
+        try:
+            restored = bool(bundle) and _restore_session(bundle)
+        except Exception:
+            _log.warning('Не удалось восстановить сеанс перед открытием файла', exc_info=True)
+    if not open_path(path) and not restored:
+        show_welcome()
+
+
 def open_file_dialog():
     result = state.window.create_file_dialog(webview.FileDialog.OPEN, file_types=OPEN_FILE_TYPES)
     if result:
@@ -626,6 +646,67 @@ def open_detached_window(spec, screen_x, screen_y):
 
     threading.Thread(target=run, daemon=True).start()
     return job_id
+
+
+def open_new_window():
+    """Новое окно с пустым документом: Ctrl+N или повторный запуск программы без файла.
+
+    Окно создаётся в своём потоке по той же причине, что и при переносе вкладки:
+    из ответа странице Show() ждёт занятый поток интерфейса.
+    """
+    origin = state.active_slot()
+    x = y = None
+    if origin is not None and origin.window is not None:
+        try:
+            x = int(origin.window.x) + 32
+            y = int(origin.window.y) + 32
+        except (TypeError, ValueError, AttributeError):
+            x = y = None
+    launch = {'kind': 'tabs', 'tabs': [_markdown_spec('', None)], 'active': 0}
+
+    def run():
+        time.sleep(0.05)
+        from .windows import create_editor_window
+        create_editor_window(launch=launch, x=x, y=y)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _live_slot():
+    """Окно, куда открывать файлы от повторного запуска. None — окон уже нет."""
+    alive = [
+        slot for slot in state.iter_slots()
+        if slot.window is not None and not slot.closed and not slot.close_started
+    ]
+    if not alive:
+        return None
+    return state.primary if state.primary in alive else alive[-1]
+
+
+def open_from_another_launch(files):
+    """Повторный запуск программы передал сюда файлы. Пусто — нужно новое окно.
+
+    False — открыть некуда: программа как раз закрывается.
+    """
+    from .win.single_instance import bring_to_front
+
+    slot = _live_slot()
+    if slot is None:
+        return False
+    # Окно ещё грузит прошлый сеанс: подождём, иначе вкладки перемешаются
+    slot.ready.wait(30)
+    token = bind_slot(slot)
+    try:
+        if not files:
+            open_new_window()
+            return True
+        for path in files:
+            if os.path.isfile(path):
+                open_path(path)
+    finally:
+        unbind_slot(token)
+    bring_to_front(slot.window)
+    return True
 
 
 def detach_status(job_id):

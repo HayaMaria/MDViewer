@@ -885,7 +885,7 @@
     if (event.code === 'KeyN' && !event.shiftKey) {
       event.preventDefault();
       event.stopPropagation();
-      callApi('new_document');
+      callApi('new_window');
       return;
     }
     if (event.code === 'KeyO' && !event.shiftKey) {

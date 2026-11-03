@@ -8,7 +8,9 @@ import webview
 
 from mdviewer import logs
 from mdviewer.paths import ICON_PATH
+from mdviewer.documents import open_from_another_launch
 from mdviewer.state import state
+from mdviewer.win import single_instance, webview2
 from mdviewer.win.associate import get_startup_file_path, register_file_associations
 from mdviewer.drag_ghost import prewarm
 from mdviewer.filedrop import enable as enable_file_drop
@@ -122,6 +124,17 @@ def silence_http_server_logs():
 
 def main():
     logs.setup()
+    if not webview2.is_installed():
+        logging.getLogger(__name__).warning('WebView2 не найден, запуск отменён')
+        webview2.ask_to_install()
+        return
+
+    startup_file = get_startup_file_path()
+    # Программа уже запущена: отдать ей файл (или попросить новое окно) и выйти
+    listener = single_instance.hand_over([startup_file] if startup_file else [])
+    if listener is True:
+        return
+
     # debug=True нужен, чтобы Tab/Shift+Tab доходили до JS (AreBrowserAcceleratorKeysEnabled),
     # но DevTools при этом открываться не должны
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
@@ -145,7 +158,9 @@ def main():
     loaded_callbacks.append(configure_context_menu)
     loaded_callbacks.append(allow_page_read)
     slot = create_editor_window()
-    slot.startup_file = get_startup_file_path()
+    slot.startup_file = startup_file
+    if listener is not None:
+        single_instance.serve(listener, open_from_another_launch)
     webview.start(debug=True)
 
 

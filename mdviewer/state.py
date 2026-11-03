@@ -38,6 +38,10 @@ class WindowSlot:
         self.session_epoch = 0
         self.force_close = False
         self.close_started = False
+        # Документ на экране: сюда можно открывать файлы от повторного запуска.
+        self.ready = threading.Event()
+        # Окно закрыто. Слот остаётся ради снимка вкладок в общей сессии.
+        self.closed = False
         # Что это окно должно открыть вместо сессии с диска: вкладка с другого окна.
         self.launch = None
         # Последний снимок вкладок для общего файла сессии.
