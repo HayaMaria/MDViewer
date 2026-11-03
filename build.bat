@@ -3,7 +3,8 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 echo Сборка MDViewer (onedir)...
-venv\Scripts\pyinstaller --noconfirm MDViewer.spec
+rem Через python -m: запускалки venv\Scripts\*.exe ломаются, если переименовать папку проекта
+venv\Scripts\python -m PyInstaller --noconfirm MDViewer.spec
 
 echo.
 echo Готово! Приложение — в папке dist\MDViewer\
