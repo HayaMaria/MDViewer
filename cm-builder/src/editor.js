@@ -6,7 +6,7 @@ import { StateField, StateEffect, RangeSetBuilder, Compartment, EditorState, Pre
 import { indentUnit } from "@codemirror/language";
 import { undo, redo, undoDepth, redoDepth, indentLess } from "@codemirror/commands";
 import { marked } from "marked";
-import { applyChartTheme, renderChart } from "./charts.js";
+import { applyChartTheme, chartProblem, renderChart } from "./charts.js";
 import { builtinHighlight, codeHighlighting } from "./code-highlight.js";
 import { highlightCodeBlock } from "./highlight.js";
 import { editorCodeLanguage } from "./code-languages.js";
@@ -652,7 +652,8 @@ function rememberMermaid(el) {
   scaleDiagramSvg(el);
 }
 
-function paintMermaid(nodes) {
+// onEach — после каждой готовой схемы (экспорт показывает по нему прогресс).
+function paintMermaid(nodes, onEach) {
   if (!nodes.length) return Promise.resolve();
   const generation = diagramGeneration;
   return ensureMermaid().then((api) => {
@@ -665,6 +666,7 @@ function paintMermaid(nodes) {
       if (cached !== undefined) {
         el.innerHTML = cached;
         scaleDiagramSvg(el);
+        if (onEach) onEach();
         return;
       }
       if (el.querySelector("svg") && el.dataset.code) {
@@ -673,7 +675,9 @@ function paintMermaid(nodes) {
       fresh.push(el);
     });
     if (!fresh.length || !api) return;
-    return Promise.resolve(api.run({ nodes: fresh })).catch(() => { }).then(() => {
+    const options = { nodes: fresh };
+    if (onEach) options.postRenderCallback = () => onEach();
+    return Promise.resolve(api.run(options)).catch(() => { }).then(() => {
       if (generation !== diagramGeneration) {
         fresh.forEach((el) => {
           if (el.isConnected) enqueueDiagram(el);
@@ -2309,7 +2313,7 @@ function exportMarkup() {
 }
 
 // Дорисовать все схемы превью, включая те, что ещё стоят в очереди за экраном.
-function paintAllPreviewDiagrams() {
+function paintAllPreviewDiagrams(progress) {
   const preview = document.getElementById("preview");
   if (!preview) return Promise.resolve();
   const mermaids = [];
@@ -2323,7 +2327,10 @@ function paintAllPreviewDiagrams() {
       diagramQueue.splice(i, 1);
     }
   }
-  return paintMermaid(mermaids).then(() => Promise.all(nomnomls.map(paintNomnoml)));
+  const step = progress ? progress(mermaids.length + nomnomls.length) : null;
+  return paintMermaid(mermaids, step).then(() => Promise.all(nomnomls.map((el) =>
+    paintNomnoml(el).then(() => { if (step) step(); })
+  )));
 }
 
 // После перестройки превью новые графики без canvas дорисовать самим.
@@ -2383,7 +2390,7 @@ function restoreMermaidTheme() {
 }
 
 // Схемы для файла в теме, отличной от редактора. Превью в это время не трогаем.
-function paintExportMermaid(nodes, theme) {
+function paintExportMermaid(nodes, theme, onEach) {
   if (!nodes.length) return Promise.resolve();
   nodes.forEach((el, i) => {
     el.id = "mdv-export-mermaid-" + i;
@@ -2397,7 +2404,9 @@ function paintExportMermaid(nodes, theme) {
   return loadScript("lib/mermaid.min.js").then(() => {
     window.mermaid.initialize(mermaidThemes[theme] || mermaidThemes.light);
     mermaidThemeApplied = theme;
-    return Promise.resolve(window.mermaid.run({ nodes })).catch(() => { });
+    const options = { nodes };
+    if (onEach) options.postRenderCallback = () => onEach();
+    return Promise.resolve(window.mermaid.run(options)).catch(() => { });
   }).then(() => {
     nodes.forEach((el) => {
       if (el.querySelector("svg")) scaleDiagramSvg(el);
@@ -2406,6 +2415,17 @@ function paintExportMermaid(nodes, theme) {
     restoreMermaidTheme();
     releasePreviewHold();
   });
+}
+
+// Схемы в теме файла, отличной от темы редактора.
+function paintOtherTheme(host, name, job) {
+  const mermaids = Array.from(host.querySelectorAll(".mermaid"));
+  const nomnomls = Array.from(host.querySelectorAll(".nomnoml-diagram"));
+  const total = mermaids.length + nomnomls.length;
+  const step = total ? exportCounter(job, "Рисуем схемы", total) : null;
+  return paintExportMermaid(mermaids, name, step).then(() =>
+    Promise.all(nomnomls.map((el) => paintExportNomnoml(el, name).then(() => { if (step) step(); })))
+  );
 }
 
 function dropDiagramSource(host) {
@@ -2451,6 +2471,65 @@ function findDocumentImages(text) {
   return images;
 }
 
+// Похоже на картинку, но Markdown её не узнал: например, адрес с пробелами
+// без угловых скобок. Такая строка уходит в HTML простым текстом.
+const BROKEN_IMAGE_START = /!\[[^\]\n]*\]\(/;
+
+// Текст, который Markdown оставил как есть. Код, картинки и экранирование не в счёт.
+function plainInlineText(tokens) {
+  let text = "";
+  (tokens || []).forEach((token) => {
+    if (!token) return;
+    if (token.type === "text" && !token.tokens) {
+      text += token.text || "";
+      return;
+    }
+    if (["codespan", "code", "escape", "image", "html"].indexOf(token.type) !== -1) {
+      text += " ";
+      return;
+    }
+    text += plainInlineText(token.tokens) + plainInlineText(token.items);
+    if (token.header) text += plainInlineText(token.header);
+    (token.rows || []).forEach((row) => { text += plainInlineText(row); });
+  });
+  return text;
+}
+
+function findBrokenImages(text) {
+  const lines = String(text || "").split("\n");
+  const broken = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^[ ]{0,3}(`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || !BROKEN_IMAGE_START.test(maskInlineCode(line))) continue;
+    let leftover = "";
+    try {
+      leftover = plainInlineText(marked.lexer(line));
+    } catch (e) {
+      continue;
+    }
+    if (!BROKEN_IMAGE_START.test(leftover)) continue;
+    const start = line.indexOf("![");
+    const snippet = line.slice(start).trim();
+    broken.push({ line: i + 1, snippet: snippet.length > 90 ? snippet.slice(0, 90) + "…" : snippet });
+  }
+  return broken;
+}
+
+function brokenImageError(image) {
+  return {
+    error: true,
+    message: 'Ошибка экспорта: в строке ' + image.line + ' ссылка на изображение записана с ошибкой, ' +
+      'и картинка не получится: "' + image.snippet + '".\n\n' +
+      "Проверьте скобки. Адрес с пробелами нужно заключать в угловые скобки, например ![](<C:/Папка/фото.jpg>).",
+    line: image.line,
+  };
+}
+
 function imageFileName(href) {
   const clean = String(href || "").split(/[?#]/)[0];
   const parts = clean.split(/[/\\]/).filter(Boolean);
@@ -2466,28 +2545,219 @@ window.exportImageInfo = function () {
   return { any: images.length > 0, local: local };
 };
 
-function imageErrorMessage(image) {
-  return 'Произошла ошибка. Проверьте ссылку на изображение "' + image.snippet + '" в строке ' + image.line + '.';
+// Причины из images.embed_image. 25 МБ — как MAX_IMAGE_BYTES в images.py.
+const IMAGE_PROBLEMS = {
+  too_large: "изображение больше 25 МБ, такие картинки не встраиваются. Уменьшите его или экспортируйте без встраивания картинок",
+  missing: "файл изображения не найден. Проверьте путь",
+  path: "нужен полный путь к файлу, например C:/Картинки/фото.png",
+  format: "этот формат не поддерживается. Подходят PNG, JPG, GIF, WebP, BMP и SVG",
+  not_image: "по этому адресу не изображение. Проверьте ссылку",
+  download: "изображение не удалось скачать. Проверьте ссылку и подключение к интернету",
+  unreadable: "файл изображения не удалось прочитать: возможно, он занят другой программой или к нему нет доступа",
+};
+
+function imageErrorMessage(image, reason) {
+  const problem = IMAGE_PROBLEMS[reason];
+  const message = problem
+    ? 'Ошибка экспорта: изображение "' + image.snippet + '" в строке ' + image.line + ": " + problem + "."
+    : 'Произошла ошибка. Проверьте ссылку на изображение "' + image.snippet + '" в строке ' + image.line + ".";
+  return { error: true, message: message, line: image.line };
 }
 
-function embedDocumentImages() {
+// ----- Ход экспорта: прогресс на плашке, отмена и отметки для Python -----
+// Python ждёт не общее время, а продвижение: каждая отметка продлевает ожидание.
+const EXPORT_CANCELLED = { cancelled: true };
+// Сборка итоговой строки — один долгий шаг без промежуточных отметок.
+const EXPORT_COLLECT_PATIENCE = 300;
+// Одна строка HTML больше примерно 300 МБ уже не проходит через страницу и мост в Python.
+const EMBED_LIMIT_BYTES = 300 * 1024 * 1024;
+let exportJob = null;
+
+function exportStopped(job) {
+  return job !== exportJob || job.cancelled;
+}
+
+function exportStep(job, text, patience) {
+  if (exportStopped(job)) return;
+  if (typeof window.setExportProgress === "function") window.setExportProgress(text, true);
+  if (typeof window.callApi === "function") {
+    Promise.resolve(window.callApi("export_progress", job.id, patience || 0)).catch(() => {});
+  }
+}
+
+// «Картинки: 3 из 40». Возвращает функцию «готов ещё один».
+function exportCounter(job, label, total) {
+  let done = 0;
+  exportStep(job, label + ": 0 из " + total);
+  return () => {
+    done = Math.min(done + 1, total);
+    exportStep(job, label + ": " + done + " из " + total);
+  };
+}
+
+window.cancelExport = function () {
+  const job = exportJob;
+  if (!job || job.cancelled) return;
+  job.cancelled = true;
+  if (typeof window.callApi === "function") {
+    Promise.resolve(window.callApi("cancel_export", job.id)).catch(() => {});
+  }
+};
+
+function formatSize(bytes) {
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return gb.toFixed(1).replace(".", ",") + " ГБ";
+  return Math.max(1, Math.round(bytes / (1024 * 1024))) + " МБ";
+}
+
+// bytes — оценка заранее; 0 — предел превышен уже во время встраивания.
+function embedTooLarge(bytes) {
+  const size = bytes > EMBED_LIMIT_BYTES ? "около " + formatSize(bytes) : "больше " + formatSize(EMBED_LIMIT_BYTES);
+  return {
+    error: true,
+    message: "Документ слишком большой, чтобы встроить картинки в один HTML-файл: вместе с ними получится " +
+      size + ", а программа собирает файлы примерно до " + formatSize(EMBED_LIMIT_BYTES) + ".\n\n" +
+      "Что можно сделать:\n" +
+      "• экспортировать без встраивания картинок, а сами картинки положить рядом с HTML-файлом;\n" +
+      "• разбить документ на несколько файлов поменьше и экспортировать каждый отдельно.",
+  };
+}
+
+// Выделить строки (с 1) после ошибки экспорта: курсор там, обычное выделение.
+// last не задан — одна строка.
+window.selectEditorLine = function (number, last) {
+  const doc = view.state.doc;
+  const clamp = (value) => Math.min(Math.max(1, Number(value) || 1), doc.lines);
+  const first = clamp(number);
+  const end = last ? Math.max(first, clamp(last)) : first;
+  view.dispatch({
+    selection: { anchor: doc.line(first).from, head: doc.line(end).to },
+    scrollIntoView: true,
+    userEvent: "select",
+  });
+  view.focus();
+};
+
+function embedDocumentImages(job) {
   const images = findDocumentImages(view.state.doc.toString());
   const map = {};
+  if (!images.length) return Promise.resolve({ map: map });
+  if (typeof window.callApi !== "function") return Promise.resolve(imageErrorMessage(images[0]));
+  exportStep(job, "Считаем размер картинок…");
+  const estimate = Promise.resolve(window.callApi("embed_estimate", images.map((image) => image.dest)))
+    .catch(() => null);
+  return estimate.then((size) => {
+    if (exportStopped(job)) return EXPORT_CANCELLED;
+    if (size && size.bytes > EMBED_LIMIT_BYTES) return embedTooLarge(size.bytes);
+    const step = exportCounter(job, "Картинки", images.length);
+    let total = 0;
+    let chain = Promise.resolve(null);
+    images.forEach((image) => {
+      chain = chain.then((failed) => {
+        if (failed) return failed;
+        if (exportStopped(job)) return EXPORT_CANCELLED;
+        if (!image.dest) return imageErrorMessage(image);
+        if (map[image.dest]) {
+          step();
+          return null;
+        }
+        return window.callApi("embed_image", image.dest).then((result) => {
+          if (!result || !result.ok || !result.uri) return imageErrorMessage(image, result && result.reason);
+          map[image.dest] = result.uri;
+          total += result.uri.length;
+          // Адреса из интернета заранее не оценить: предел проверяем и по ходу.
+          if (total > EMBED_LIMIT_BYTES) return embedTooLarge(0);
+          step();
+          return null;
+        }, () => imageErrorMessage(image));
+      });
+    });
+    return chain.then((failed) => failed || { map: map });
+  });
+}
+
+// Блоки ```mermaid / ```nomnoml / ```chart. line — строка открывающей ограды,
+// endLine — закрывающей (или последняя строка, если блок не закрыт).
+function findDocumentDiagrams(text) {
+  const lines = String(text || "").split("\n");
+  const blocks = [];
+  let open = null;
+  for (let i = 0; i < lines.length; i++) {
+    const fence = /^[ ]{0,3}(`{3,}|~{3,})(.*)$/.exec(lines[i]);
+    if (!open) {
+      if (fence) open = { mark: fence[1], info: parseFenceInfo(fence[2]), line: i + 1, body: [] };
+      continue;
+    }
+    if (fence && fence[1][0] === open.mark[0] && fence[1].length >= open.mark.length && !fence[2].trim()) {
+      blocks.push({ type: open.info.type, line: open.line, endLine: i + 1, code: open.body.join("\n") });
+      open = null;
+      continue;
+    }
+    open.body.push(lines[i]);
+  }
+  if (open) blocks.push({ type: open.info.type, line: open.line, endLine: lines.length, code: open.body.join("\n") });
+  return blocks.filter((block) => DIAGRAM_NAMES[block.type]);
+}
+
+const DIAGRAM_NAMES = { mermaid: "схему Mermaid", nomnoml: "схему nomnoml", chart: "график" };
+
+function diagramError(block, mistake) {
+  const where = DIAGRAM_NAMES[block.type] + " в строке " + block.line;
+  const message = mistake
+    ? "Ошибка экспорта: не удалось построить " + where + ": " + mistake + ".\n\nИсправьте код и повторите экспорт."
+    : "Ошибка экспорта: не удалось построить " + where + ".\n\nПопробуйте ещё раз. Если ошибка повторится, проверьте код или временно уберите этот блок из документа.";
+  return { error: true, message: message, line: block.line, endLine: block.endLine };
+}
+
+// Проверить схемы до экспорта. Ошибка в коде — экспорт останавливается.
+function checkExportDiagrams(job) {
+  const blocks = findDocumentDiagrams(view.state.doc.toString());
+  if (!blocks.length) return Promise.resolve(null);
+  const step = exportCounter(job, "Проверяем схемы", blocks.length);
   let chain = Promise.resolve(null);
-  images.forEach((image) => {
+  blocks.forEach((block) => {
     chain = chain.then((failed) => {
       if (failed) return failed;
-      if (!image.dest || typeof window.callApi !== "function") {
-        return imageErrorMessage(image);
-      }
-      return window.callApi("embed_image", image.dest).then((result) => {
-        if (!result || !result.ok || !result.uri) return imageErrorMessage(image);
-        map[image.dest] = result.uri;
-        return null;
-      }, () => imageErrorMessage(image));
+      if (exportStopped(job)) return EXPORT_CANCELLED;
+      return checkDiagram(block).then((problem) => {
+        if (!problem) step();
+        return problem;
+      });
     });
   });
-  return chain.then((failed) => failed ? { error: true, message: failed } : { map: map });
+  return chain;
+}
+
+function checkDiagram(block) {
+  return Promise.resolve().then(() => {
+    if (block.type === "chart") {
+      let mistake;
+      try {
+        mistake = chartProblem(block.code);
+      } catch (e) {
+        mistake = "не удалось разобрать данные графика";
+      }
+      return mistake ? diagramError(block, mistake) : null;
+    }
+    if (block.type === "nomnoml") {
+      return ensureNomnoml().then(() => {
+        if (!window.nomnoml) return diagramError(block);
+        try {
+          window.nomnoml.renderSvg(block.code, document);
+          return null;
+        } catch (e) {
+          return diagramError(block, "в коде схемы есть ошибка");
+        }
+      }, () => diagramError(block));
+    }
+    return ensureMermaid().then((api) => {
+      if (!api) return diagramError(block);
+      return Promise.resolve(api.parse(block.code)).then(
+        () => null,
+        () => diagramError(block, "в коде схемы есть ошибка")
+      );
+    }, () => diagramError(block));
+  });
 }
 
 function rewriteExportImages(host, embed, uriMap) {
@@ -2578,17 +2848,21 @@ function hydrateRemoteImages(roots) {
   });
 }
 
-function resolveLooseRemoteImages() {
+function resolveLooseRemoteImages(job) {
   const images = findDocumentImages(view.state.doc.toString()).filter((image) =>
     isRemoteHref(image.dest) && remoteImageNeedsResolve(image.dest)
   );
   const map = {};
-  let chain = Promise.resolve();
+  if (!images.length) return Promise.resolve({ map: map });
+  const step = exportCounter(job, "Ссылки на картинки", images.length);
+  let chain = Promise.resolve(null);
   images.forEach((image) => {
-    chain = chain.then(() => {
+    chain = chain.then((stopped) => {
+      if (stopped || exportStopped(job)) return EXPORT_CANCELLED;
       const known = remoteImageCache.get(image.dest);
       if (known) {
         map[image.dest] = known;
+        step();
         return null;
       }
       if (typeof window.callApi !== "function") return null;
@@ -2597,10 +2871,11 @@ function resolveLooseRemoteImages() {
           remoteImageCache.set(image.dest, result.url);
           map[image.dest] = result.url;
         }
-      }, () => {});
+        step();
+      }, () => step());
     });
   });
-  return chain.then(() => ({ map: map }));
+  return chain.then((stopped) => stopped || { map: map });
 }
 
 function waitForPaint() {
@@ -2611,18 +2886,31 @@ function waitForPaint() {
 
 // theme: 'dark' | 'light' — уже выбранная тема файла, не «current».
 // embed: встроить картинки. Иначе у локального файла в HTML остаётся только имя.
-window.prepareExportBody = function (theme, embed) {
+// jobId — номер задачи в Python: по нему идут отметки хода и отмена.
+window.prepareExportBody = function (theme, embed, jobId) {
+  if (exportJob) exportJob.cancelled = true;
+  const job = { id: jobId, cancelled: false };
+  exportJob = job;
   if (typeof window.showExportBusy === "function") window.showExportBusy();
-  return waitForPaint().then(() => {
-    const load = embed ? embedDocumentImages() : resolveLooseRemoteImages();
+  exportStep(job, "Готовим документ…");
+  const badImage = findBrokenImages(view.state.doc.toString())[0];
+  if (badImage) {
+    if (exportJob === job) exportJob = null;
+    return Promise.resolve(brokenImageError(badImage));
+  }
+  return waitForPaint().then(() => checkExportDiagrams(job)).then((broken) => {
+    if (broken) return broken;
+    const load = embed ? embedDocumentImages(job) : resolveLooseRemoteImages(job);
     return load.then((packed) => {
-      if (packed && packed.error) return packed;
-      return paintExportBody(theme, !!embed, packed && packed.map);
+      if (packed && (packed.error || packed.cancelled)) return packed;
+      return paintExportBody(theme, !!embed, packed && packed.map, job);
     });
+  }).finally(() => {
+    if (exportJob === job) exportJob = null;
   });
 };
 
-function paintExportBody(theme, embed, uriMap) {
+function paintExportBody(theme, embed, uriMap, job) {
   const name = theme === "light" ? "light" : "dark";
   const host = document.createElement("div");
   host.setAttribute("data-mdv-export-stage", "1");
@@ -2632,7 +2920,7 @@ function paintExportBody(theme, embed, uriMap) {
   host.innerHTML = exportMarkup();
   document.body.appendChild(host);
   const same = getPreviewTheme() === name;
-  const job = same
+  const work = same
     ? Promise.resolve().then(() => {
       if (previewTimer !== null) {
         clearTimeout(previewTimer);
@@ -2647,12 +2935,16 @@ function paintExportBody(theme, embed, uriMap) {
           captureDiagrams = false;
         }
       }
-      return paintAllPreviewDiagrams().then(() => paintUnreadyCharts());
+      return paintAllPreviewDiagrams((total) => total ? exportCounter(job, "Рисуем схемы", total) : null)
+        .then(() => paintUnreadyCharts());
     }).then(() => copyPaintedDiagrams(host))
-    : paintExportMermaid(Array.from(host.querySelectorAll(".mermaid")), name).then(() =>
-      Promise.all(Array.from(host.querySelectorAll(".nomnoml-diagram")).map((el) => paintExportNomnoml(el, name)))
-    );
-  return job.then(() => {
+    : paintOtherTheme(host, name, job);
+  return work.then(() => {
+    if (exportStopped(job)) {
+      host.remove();
+      return EXPORT_CANCELLED;
+    }
+    exportStep(job, "Собираем файл…", EXPORT_COLLECT_PATIENCE);
     dropDiagramSource(host);
     rewriteExportImages(host, embed, uriMap);
     const body = host.innerHTML;

@@ -7,7 +7,7 @@ import uuid
 
 import webview
 
-from . import APP_TITLE, UNTITLED, config, durable, session
+from . import APP_TITLE, UNTITLED, config, durable, errors, session
 from .htmlfile import inject_fit_width_style, prepare_html_for_preview, read_html_text
 from .state import alert, bind_slot, call_js, state, unbind_slot
 
@@ -264,7 +264,37 @@ def bind_active(info):
     return state.session_epoch
 
 
-def _markdown_spec(text, path, place=None, dirty=False, title=None):
+def file_stamp(path):
+    """Метка версии файла на диске: время изменения и размер.
+
+    '' — файла нет. None — узнать не удалось (например, сетевой диск отвалился).
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        return ''
+    except OSError:
+        return None
+    return f'{info.st_mtime_ns}:{info.st_size}'
+
+
+def reload_file(path, html=False):
+    """Перечитать файл, изменённый другой программой. Ответ уходит в JS."""
+    name = os.path.basename(path) if isinstance(path, str) else ''
+    try:
+        if html:
+            content = inject_fit_width_style(prepare_html_for_preview(path, read_html_text(path)))
+        else:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+    except (OSError, UnicodeDecodeError, TypeError) as e:
+        return {'ok': False, 'message': errors.message('загрузить новую версию файла', name, e)}
+    return {'ok': True, 'content': content, 'stamp': file_stamp(path)}
+
+
+def _markdown_spec(text, path, place=None, dirty=False, title=None, stamp=None):
     spec = {
         'text': text if isinstance(text, str) else '',
         'path': path,
@@ -273,6 +303,7 @@ def _markdown_spec(text, path, place=None, dirty=False, title=None):
         'dirty': bool(dirty),
         'html': False,
         'welcome': False,
+        'stamp': stamp,
     }
     if place:
         spec.update(_place_payload(place))
@@ -290,11 +321,11 @@ def _focus_open_path(path):
         return False
 
 
-def _load_markdown(text, path, place=None, dirty=False, remember=True):
+def _load_markdown(text, path, place=None, dirty=False, remember=True, stamp=None):
     _suspend_session()
     try:
         name = os.path.basename(path) if path else UNTITLED
-        call_js('openMarkdownTab', _markdown_spec(text, path, place, dirty, name))
+        call_js('openMarkdownTab', _markdown_spec(text, path, place, dirty, name, stamp))
         state.html_mode = False
         state.current_file = path
         state.opened_path = path
@@ -315,20 +346,22 @@ def open_path(path):
     if os.path.splitext(path)[1].lower() in HTML_EXTS:
         return _open_html(path)
     try:
+        stamp = file_stamp(path)
         with open(path, 'r', encoding='utf-8') as f:
             text = f.read()
     except (OSError, UnicodeDecodeError) as e:
-        alert(f'Ошибка открытия файла: {e}')
+        alert(errors.message('открыть файл', os.path.basename(path), e))
         return False
-    _load_markdown(text, path)
+    _load_markdown(text, path, stamp=stamp)
     return True
 
 
 def _open_html(path):
     try:
+        stamp = file_stamp(path)
         html = prepare_html_for_preview(path, read_html_text(path))
     except OSError as e:
-        alert(f'Ошибка открытия HTML-файла: {e}')
+        alert(errors.message('открыть HTML-файл', os.path.basename(path), e))
         return False
     _suspend_session()
     try:
@@ -341,6 +374,7 @@ def _open_html(path):
             'title': name,
             'dirty': False,
             'welcome': False,
+            'stamp': stamp,
         })
         # current_file = None защищает HTML-файл от перезаписи через Ctrl+S
         state.current_file = None
@@ -366,7 +400,11 @@ def restore_session(data):
 
 
 def _materialize_tab(tab):
-    """Прочитать вкладку с диска. None — показать её нельзя."""
+    """Прочитать вкладку с диска. None — показать её нельзя.
+
+    Если файл есть, но не читается, бросает OSError/UnicodeDecodeError:
+    о причине нужно сказать пользователю.
+    """
     if session.is_pristine_welcome(tab):
         return {
             'welcome': True,
@@ -381,10 +419,8 @@ def _materialize_tab(tab):
         return None
     if tab.get('html'):
         path = tab['path']
-        try:
-            html = prepare_html_for_preview(path, read_html_text(path))
-        except OSError:
-            return None
+        stamp = file_stamp(path)
+        html = prepare_html_for_preview(path, read_html_text(path))
         return {
             'html': True,
             'htmlContent': inject_fit_width_style(html),
@@ -393,42 +429,61 @@ def _materialize_tab(tab):
             'title': tab.get('title') or os.path.basename(path),
             'dirty': False,
             'welcome': False,
+            'stamp': stamp,
         }
     if tab.get('dirty'):
         return _markdown_spec(tab.get('draft') or '', tab.get('path'), tab, dirty=True, title=tab.get('title'))
     path = tab.get('path')
     if not path:
         return _markdown_spec('', None, tab, dirty=False, title=tab.get('title'))
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            text = f.read()
-    except (OSError, UnicodeDecodeError):
-        return None
-    return _markdown_spec(text, path, tab, dirty=False, title=tab.get('title'))
+    stamp = file_stamp(path)
+    with open(path, 'r', encoding='utf-8') as f:
+        text = f.read()
+    return _markdown_spec(text, path, tab, dirty=False, title=tab.get('title'), stamp=stamp)
+
+
+def _session_problems_message(problems):
+    """problems: [(путь, ошибка)]. Одно сообщение на все файлы, которые не открылись."""
+    if len(problems) == 1:
+        path, error = problems[0]
+        return errors.message('открыть файл из прошлого сеанса', path, error)
+    lines = ['Не удалось открыть файлы из прошлого сеанса:']
+    hints = []
+    for path, error in problems:
+        lines.append(f'• {path} — {errors.describe(error)}')
+        hint = errors.advice(error)
+        if hint and hint not in hints:
+            hints.append(hint)
+    text = '\n'.join(lines)
+    return text + '\n\n' + '\n'.join(hints) if hints else text
 
 
 def _restore_session(data):
     if not session.bundle_restorable(data):
         return False
     prepared = []
-    missing = []
+    problems = []
     chosen = 0
     active = data.get('active', 0)
     for index, tab in enumerate(data.get('tabs') or []):
-        item = _materialize_tab(tab)
+        path = tab.get('path') if isinstance(tab, dict) else None
+        try:
+            item = _materialize_tab(tab)
+        except (OSError, UnicodeDecodeError) as e:
+            problems.append((path, e))
+            continue
         if item is None:
-            path = tab.get('path') if isinstance(tab, dict) else None
             if path:
-                missing.append(path)
+                problems.append((path, FileNotFoundError(path)))
             continue
         if index == active:
             chosen = len(prepared)
         prepared.append(item)
     real = [item for item in prepared if not item.get('welcome')]
+    if problems:
+        alert(_session_problems_message(problems))
     if not real:
         return False
-    if missing:
-        alert('Файл из прошлого сеанса не найден:\n' + '\n'.join(missing))
     if chosen >= len(prepared):
         chosen = 0
     current = prepared[chosen]
@@ -553,8 +608,10 @@ def _write_editor_content_unlocked(path):
         # как новый текст дойдёт до диска.
         durable.write_text(path, content, backup=False, newline=None)
     except OSError as e:
-        alert(f'Ошибка сохранения: {e}')
+        alert(errors.message('сохранить файл', os.path.basename(path), e))
         return False
+    # Своя запись не должна выглядеть как правка другой программой.
+    call_js('noteActiveStamp', file_stamp(path))
     if revision is None:
         call_js('markSaved')
     else:

@@ -1,5 +1,8 @@
 // Диалог кнопки «Изображение»: файл с диска или адрес, подпись и ширина.
 (function () {
+  // Последний выбранный вручную источник: помнится до перезапуска программы
+  var lastSource = 'file';
+
   function selectedSource() {
     var checked = document.querySelector('input[name="image-source"]:checked');
     return checked ? checked.value : 'file';
@@ -45,7 +48,7 @@
       file.value = text;
       caption.value = '';
     } else {
-      setSource('file');
+      setSource(lastSource);
       caption.value = text || 'подпись';
     }
     window.fillMediaSizeSelect('image-size', window.getMediaSizeDefault('image'));
@@ -54,6 +57,7 @@
 
   document.querySelectorAll('input[name="image-source"]').forEach(function (input) {
     input.addEventListener('change', function () {
+      lastSource = input.value;
       setSource(input.value);
     });
   });

@@ -130,4 +130,27 @@ def test_preview_rejects_fake_extension(tmp_path):
 
 @windows_only
 def test_embed_missing_file(tmp_path):
-    assert images.embed_image(str(tmp_path / 'нет.png')) == {'ok': False}
+    assert images.embed_image(str(tmp_path / 'нет.png')) == {'ok': False, 'reason': 'missing'}
+
+
+@windows_only
+def test_embed_too_large(tmp_path, monkeypatch):
+    path = tmp_path / 'big.png'
+    path.write_bytes(PNG + b'\x00' * 64)
+    monkeypatch.setattr(images, 'MAX_IMAGE_BYTES', 16)
+    assert images.embed_image(str(path)) == {'ok': False, 'reason': 'too_large'}
+
+
+@windows_only
+def test_embed_fake_extension(tmp_path):
+    path = tmp_path / 'not-really.png'
+    path.write_bytes(b'<html>not an image</html>')
+    assert images.embed_image(str(path)) == {'ok': False, 'reason': 'not_image'}
+
+
+@windows_only
+def test_embed_estimate(tmp_path):
+    path = tmp_path / 'a.png'
+    path.write_bytes(b'x' * 300)
+    estimate = images.embed_estimate([str(path), str(path), 'https://example.com/a.png'])
+    assert estimate == {'bytes': 400, 'unknown': 1}

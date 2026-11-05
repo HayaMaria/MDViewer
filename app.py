@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -6,7 +7,7 @@ import wsgiref.simple_server
 import bottle
 import webview
 
-from mdviewer import logs
+from mdviewer import config, errors, logs
 from mdviewer.paths import ICON_PATH
 from mdviewer.documents import open_from_another_launch
 from mdviewer.state import state
@@ -147,6 +148,56 @@ def silence_http_server_logs():
     bottle._stderr = lambda *args: None
 
 
+ASSOCIATION_WARNED = 'associationWarned'
+
+
+def _register_associations():
+    """Ассоциации пишутся при каждом запуске. Про сбой говорим один раз,
+    пока запись снова не пройдёт, иначе сообщение будет на каждом старте."""
+    try:
+        register_file_associations()
+    except OSError as e:
+        logging.getLogger(__name__).warning('Не удалось записать ассоциации файлов', exc_info=True)
+        if config.load_config().get(ASSOCIATION_WARNED):
+            return
+        message = (
+            'Не получилось связать MD Viewer с файлами .md и добавить пункт '
+            f'«Открыть в MD Viewer» в меню Проводника: {errors.describe(e)}.\n\n'
+            'Программа работает как обычно. Файлы можно открывать через меню '
+            '«Открыть» или перетаскиванием в окно.'
+        )
+        loaded_callbacks.append(_once(lambda: _alert_later(message)))
+        _remember_association_warning(True)
+        return
+    if config.load_config().get(ASSOCIATION_WARNED):
+        _remember_association_warning(False)
+
+
+def _remember_association_warning(value):
+    try:
+        config.set_value(ASSOCIATION_WARNED, value)
+    except OSError:
+        pass
+
+
+def _once(callback):
+    """loaded срабатывает у каждого окна, а сообщение нужно только первому."""
+    done = []
+
+    def run():
+        if done:
+            return
+        done.append(True)
+        callback()
+
+    return run
+
+
+def _alert_later(message):
+    # Не из обработчика loaded: alert держал бы страницу, пока она грузит сеанс.
+    state.window.evaluate_js(f'setTimeout(function () {{ alert({json.dumps(message)}); }}, 1500)')
+
+
 def main():
     logs.setup()
     if not webview2.is_installed():
@@ -169,10 +220,7 @@ def main():
 
     # Только из собранного exe: при запуске из исходников .md привязался бы к python.exe app.py
     if getattr(sys, 'frozen', False):
-        try:
-            register_file_associations()
-        except OSError:
-            logging.getLogger(__name__).warning('Не удалось записать ассоциации файлов', exc_info=True)
+        _register_associations()
 
     if ICON_PATH.is_file():
         webview._state['icon'] = str(ICON_PATH)

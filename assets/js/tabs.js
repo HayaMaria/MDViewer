@@ -31,6 +31,9 @@
       head: spec.head || 0,
       scroll: spec.scroll || 0,
       previewScroll: spec.previewScroll || 0,
+      // Версия файла на диске, с которой работает вкладка (см. checkActiveFile).
+      stamp: typeof spec.stamp === 'string' ? spec.stamp : null,
+      missingNoted: false,
     };
   }
 
@@ -282,6 +285,7 @@
     }
     return persistActive().then(function () {
       switching = false;
+      checkActiveFile();
     }, function () {
       switching = false;
     });
@@ -527,6 +531,115 @@
     paintDirty();
   };
 
+  // ----- Файл изменён или удалён другой программой -----
+  // Проверяем, когда пользователь возвращается в окно и когда переключает вкладку.
+  var fileCheckBusy = false;
+  var fileChangedResolver = null;
+
+  window.noteActiveStamp = function (stamp) {
+    var tab = tabs[active];
+    if (!tab || typeof stamp !== 'string') return;
+    tab.stamp = stamp;
+    tab.missingNoted = false;
+  };
+
+  function askFileChanged(tab) {
+    return new Promise(function (resolve) {
+      document.getElementById('file-changed-name').textContent = tab.title || UNTITLED;
+      document.getElementById('file-changed-dirty').style.display = tab.dirty && !tab.html ? '' : 'none';
+      window.openModal('file-changed-overlay');
+      fileChangedResolver = resolve;
+    });
+  }
+
+  window.answerFileChanged = function (choice) {
+    window.closeModal('file-changed-overlay');
+    var resolve = fileChangedResolver;
+    fileChangedResolver = null;
+    if (resolve) resolve(choice || 'keep');
+  };
+
+  function reloadTab(tab) {
+    return callApi('reload_file', tab.path, !!tab.html).then(function (result) {
+      if (!result || !result.ok) {
+        window.alert(result && result.message ? result.message : 'Не удалось загрузить новую версию файла.');
+        return;
+      }
+      if (tabs[active] !== tab) return;
+      if (typeof result.stamp === 'string') tab.stamp = result.stamp;
+      var content = result.content || '';
+      if (tab.html) {
+        tab.htmlContent = content;
+        showHtml(tab);
+        return;
+      }
+      snapshotActive();
+      tab.content = content;
+      tab.editorState = null;
+      tab.dirty = false;
+      tab.anchor = Math.min(tab.anchor || 0, content.length);
+      tab.head = Math.min(tab.head || 0, content.length);
+      showMarkdown(tab);
+      render();
+      return persistActive();
+    });
+  }
+
+  // Оставить свой текст. На диске уже другой, поэтому вкладка становится несохранённой.
+  function keepTabVersion(tab, stamp) {
+    tab.stamp = stamp;
+    if (tab.html || tabs[active] !== tab) return;
+    if (window.markUnsaved) window.markUnsaved();
+    return persistActive();
+  }
+
+  function noteMissingFile(tab) {
+    tab.missingNoted = true;
+    if (tab.html) {
+      window.alert('HTML-файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
+        'Во вкладке остаётся последняя загруженная версия.');
+      return;
+    }
+    if (window.markUnsaved) window.markUnsaved();
+    persistActive();
+    window.alert('Файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
+      'Текст остаётся открытым. Сохраните его, чтобы не потерять.');
+  }
+
+  function checkActiveFile() {
+    var tab = tabs[active];
+    if (fileCheckBusy || switching || closeBusy || !tab || !tab.path || modalOpen()) return;
+    fileCheckBusy = true;
+    var path = tab.path;
+    var done = function () { fileCheckBusy = false; };
+    callApi('file_stamp', path).then(function (stamp) {
+      // null — диск сейчас не ответил; спросим в следующий раз
+      if (tabs[active] !== tab || tab.path !== path || typeof stamp !== 'string') return;
+      if (stamp === '') {
+        if (!tab.missingNoted) noteMissingFile(tab);
+        return;
+      }
+      tab.missingNoted = false;
+      if (!tab.stamp) {
+        tab.stamp = stamp;
+        return;
+      }
+      if (stamp === tab.stamp) return;
+      return askFileChanged(tab).then(function (choice) {
+        if (tabs.indexOf(tab) < 0) return;
+        if (choice === 'reload') return reloadTab(tab);
+        return keepTabVersion(tab, stamp);
+      });
+    }).then(done, done);
+  }
+
+  window.addEventListener('focus', function () {
+    setTimeout(checkActiveFile, 0);
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') setTimeout(checkActiveFile, 0);
+  });
+
   var suppressClick = false;
   var detachBusy = false;
 
@@ -601,6 +714,7 @@
       head: tab.head || 0,
       scroll: tab.scroll || 0,
       previewScroll: tab.previewScroll || 0,
+      stamp: tab.stamp || null,
     };
   }
 
@@ -885,6 +999,12 @@
       event.preventDefault();
       event.stopPropagation();
       window.answerCloseTab('cancel');
+      return;
+    }
+    if (event.key === 'Escape' && document.getElementById('file-changed-overlay').classList.contains('open')) {
+      event.preventDefault();
+      event.stopPropagation();
+      window.answerFileChanged('keep');
       return;
     }
     var mod = event.ctrlKey || event.metaKey;

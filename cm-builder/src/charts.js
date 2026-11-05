@@ -223,6 +223,14 @@ function applyMediaScale(config, zoom) {
   });
 }
 
+// Что не так с данными графика. null — график построится.
+export function chartProblem(codeText) {
+  const parsed = parseChartDSL(String(codeText || ''));
+  if (!parsed) return 'не удалось разобрать данные графика';
+  if (parsed.error === 'nonumeric') return 'значения рядов должны быть числами';
+  return null;
+}
+
 export function renderChart(codeText, containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;

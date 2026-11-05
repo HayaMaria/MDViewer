@@ -244,6 +244,24 @@
     </div>
   </div>
 
+  <!-- ===== Файл изменён другой программой ===== -->
+  <div id="file-changed-overlay" class="modal-overlay">
+    <div class="modal" style="width:460px">
+      <div class="modal-header">
+        <span>Файл изменён</span>
+        <button class="modal-close" onclick="answerFileChanged('keep')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Файл «<span id="file-changed-name"></span>» изменён другой программой.</p>
+        <p id="file-changed-dirty">В этой вкладке есть несохранённые правки. Если загрузить новую версию, они пропадут.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="answerFileChanged('keep')">Оставить текущую версию</button>
+        <button class="btn btn-primary" onclick="answerFileChanged('reload')">Загрузить новую версию</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Справка ===== -->
   <div id="help-overlay" class="modal-overlay">
     <div class="modal">
@@ -409,6 +427,8 @@
     <div class="export-busy-card">
       <span class="export-spinner" aria-hidden="true"></span>
       <div class="export-busy-label">Экспортируем HTML</div>
+      <div class="export-busy-progress" id="export-busy-progress"></div>
+      <button class="btn" id="export-busy-cancel" type="button" onclick="cancelExport()">Отмена</button>
     </div>
   </div>
 

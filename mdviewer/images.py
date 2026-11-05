@@ -103,31 +103,76 @@ def preview_image(href, known_mtime=''):
 
 
 def embed_image(href):
-    """Байты картинки для HTML. ok=False — экспорт надо остановить."""
+    """Байты картинки для HTML. ok=False — экспорт надо остановить.
+
+    reason объясняет, почему не вышло: path, missing, format, too_large,
+    unreadable, not_image, download.
+    """
+    why = []
     if is_remote(href):
         href = href.strip()
         cached = _cached_remote(href)
         if cached:
             return {'ok': True, 'uri': cached[1]}
-        loaded = _load_remote(href)
+        loaded = _load_remote(href, why=why)
         if loaded is None:
-            return {'ok': False}
+            return _failed(why)
         return {'ok': True, 'uri': _store_remote(href, loaded)}
     path = local_path(href)
     if not path:
-        return {'ok': False}
+        return _failed(['path'])
     stamp = _local_stamp(path)
     if stamp is not None:
         uri = _cached_local_uri(path, stamp)
         if uri is not None:
             return {'ok': True, 'uri': uri}
-    loaded = _read_file(path)
+    loaded = _read_file(path, why=why)
     if loaded is None:
-        return {'ok': False}
+        return _failed(why)
     uri = _data_uri(loaded[0], loaded[1])
     if stamp is not None:
         _store_local(path, stamp, uri)
     return {'ok': True, 'uri': uri}
+
+
+def _failed(why):
+    return {'ok': False, 'reason': why[0] if why else 'unreadable'}
+
+
+def _note(why, reason):
+    if why is not None and not why:
+        why.append(reason)
+
+
+def embed_estimate(hrefs):
+    """Сколько займут встроенные картинки, байт строки data URI.
+
+    unknown — адреса из интернета, которые ещё не скачаны: их размер станет
+    известен только при загрузке.
+    """
+    total = 0
+    unknown = 0
+    seen = set()
+    for href in hrefs or []:
+        href = str(href or '').strip()
+        if not href or href in seen:
+            continue
+        seen.add(href)
+        if is_remote(href):
+            cached = _cached_remote(href)
+            if cached:
+                total += len(cached[1])
+            else:
+                unknown += 1
+            continue
+        path = local_path(href)
+        try:
+            size = os.path.getsize(path) if path else 0
+        except OSError:
+            size = 0
+        # base64 длиннее исходных байт на треть
+        total += (size + 2) // 3 * 4
+    return {'bytes': total, 'unknown': unknown}
 
 
 def resolve_image(href):
@@ -164,28 +209,33 @@ def local_path(href):
     return os.path.normpath(text)
 
 
-def _read_file(path):
+def _read_file(path, why=None):
     if not path or not os.path.isfile(path):
+        _note(why, 'missing')
         return None
     ext = os.path.splitext(path)[1].lower()
     if ext not in _EXT_MIME:
+        _note(why, 'format')
         return None
     try:
         if os.path.getsize(path) > MAX_IMAGE_BYTES:
+            _note(why, 'too_large')
             return None
         with open(path, 'rb') as handle:
             data = handle.read()
     except OSError:
+        _note(why, 'unreadable')
         return None
     kind = _sniff(data)
     if kind != _EXT_MIME[ext]:
+        _note(why, 'not_image')
         return None
     return kind, data
 
 
-def _load_remote(url, depth=0):
+def _load_remote(url, depth=0, why=None):
     """Картинка по адресу. Если это страница, один раз берём с неё og:image."""
-    opened = _open_remote(url)
+    opened = _open_remote(url, why)
     if opened is None:
         return None
     final, ctype, data = opened
@@ -193,40 +243,50 @@ def _load_remote(url, depth=0):
     if kind and _type_matches(ctype, kind):
         return kind, data, final
     if ctype.startswith('video/'):
+        _note(why, 'not_image')
         return None
     if depth >= 1 or not _looks_like_html(ctype, data):
+        _note(why, 'not_image')
         return None
     # Кадр ролика не берём. Обычное фото на той же странице остаётся.
     if _declared_image_is_poster(data):
+        _note(why, 'not_image')
         return None
     page = _og_image(data, final)
     if not page:
+        _note(why, 'not_image')
         return None
-    return _load_remote(page, depth + 1)
+    return _load_remote(page, depth + 1, why)
 
 
-def _open_remote(url):
+def _open_remote(url, why=None):
     if not is_remote(url):
+        _note(why, 'download')
         return None
     opener = urllib.request.build_opener(_SafeRedirect())
     request = urllib.request.Request(url, headers={'User-Agent': 'MDViewer'})
     try:
         response = opener.open(request, timeout=DOWNLOAD_TIMEOUT)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+        _note(why, 'download')
         return None
     if response is None:
+        _note(why, 'download')
         return None
     with response:
         final = response.geturl()
         if not is_remote(final):
+            _note(why, 'download')
             return None
         header = response.headers.get('Content-Type') if response.headers else ''
         ctype = header.split(';', 1)[0].strip().lower() if header else ''
         try:
             data = response.read(MAX_IMAGE_BYTES + 1)
         except OSError:
+            _note(why, 'download')
             return None
     if len(data) > MAX_IMAGE_BYTES:
+        _note(why, 'too_large')
         return None
     return final, ctype, data
 

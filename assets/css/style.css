@@ -1268,6 +1268,14 @@ body.file-drop iframe {
   font-weight: 600;
 }
 
+/* Цифры меняются часто: моноширинные, чтобы строка не прыгала. */
+.export-busy-progress {
+  min-height: 1.3em;
+  font-size: 13px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
 .export-spinner {
   display: block;
   width: 40px;

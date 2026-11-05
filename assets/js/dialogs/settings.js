@@ -324,7 +324,18 @@
     if (!el) return;
     var svg = el.querySelector('svg');
     if (svg && svg.setCurrentTime) svg.setCurrentTime(0);
+    // Повторный показ во время того же экспорта не сбрасывает уже идущий прогресс.
+    if (!el.classList.contains('open')) window.setExportProgress('', true);
     el.classList.add('open');
+  };
+
+  // text — что сейчас делается («Картинки: 3 из 40»). cancellable=false прячет «Отмену»:
+  // документ уже собран и записывается.
+  window.setExportProgress = function (text, cancellable) {
+    var progress = document.getElementById('export-busy-progress');
+    var cancel = document.getElementById('export-busy-cancel');
+    if (progress) progress.textContent = text || '';
+    if (cancel) cancel.hidden = cancellable === false;
   };
 
   window.hideExportBusy = function () {

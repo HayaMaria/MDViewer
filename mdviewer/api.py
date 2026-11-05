@@ -5,9 +5,31 @@ import webbrowser
 
 import webview
 
-from . import config, documents, export, session
-from .state import state
+from . import config, documents, errors, export, session
+from .state import alert, state
 from .win.titlebar import set_titlebar_theme
+
+
+_CONFIG_WHAT = {
+    'settings': ('настройки', 'Изменения действуют до закрытия программы.'),
+    'dictionary': ('словарь', 'Добавленное слово пропадёт после закрытия программы.'),
+}
+# Пока запись не удаётся, сообщаем один раз: тема и разделитель пишутся часто.
+_config_warned = set()
+
+
+def _write_config(write, *args, what='settings'):
+    """Записать настройки или словарь. При ошибке предупредить и вернуть None."""
+    try:
+        result = write(*args)
+    except OSError as e:
+        if what not in _config_warned:
+            _config_warned.add(what)
+            name, consequence = _CONFIG_WHAT[what]
+            alert(f'Не удалось сохранить {name}: {errors.describe(e)}.\n\n{consequence}')
+        return None
+    _config_warned.discard(what)
+    return result
 
 
 def _cursor_point():
@@ -185,11 +207,11 @@ class Api:
         return config.ui_settings()
 
     def save_settings(self, settings):
-        config.save_ui_settings(settings)
+        _write_config(config.save_ui_settings, settings)
 
     def add_user_word(self, word):
         """Слово из меню редактора. Возвращает весь свой словарь."""
-        return config.add_user_word(word)
+        return _write_config(config.add_user_word, word, what='dictionary')
 
     def start_voice_typing(self):
         """Голосовой ввод из меню редактора."""
@@ -202,16 +224,16 @@ class Api:
         return read_text()
 
     def set_font_size(self, size):
-        return config.set_font_size(size)
+        return _write_config(config.set_font_size, size)
 
     def set_theme(self, theme):
-        config.set_value('theme', theme)
+        _write_config(config.set_value, 'theme', theme)
 
     def set_splitter_pos(self, percent):
-        config.set_value('splitterPos', percent)
+        _write_config(config.set_value, 'splitterPos', percent)
 
     def set_sync_scroll(self, enabled):
-        config.set_value('syncScroll', bool(enabled))
+        _write_config(config.set_value, 'syncScroll', bool(enabled))
 
     def pick_folder(self):
         result = state.window.create_file_dialog(webview.FileDialog.FOLDER)
@@ -326,6 +348,13 @@ class Api:
     def save_document_as(self):
         documents.save_as()
 
+    def file_stamp(self, path):
+        """Метка версии файла: по ней страница замечает правку другой программой."""
+        return documents.file_stamp(path)
+
+    def reload_file(self, path, html=False):
+        return documents.reload_file(path, bool(html))
+
     def quit(self):
         for slot in state.iter_slots():
             try:
@@ -412,6 +441,17 @@ class Api:
 
     def export_html(self, theme, save_path, embed_images=None):
         export.export_html(theme, save_path, embed_images)
+
+    def export_progress(self, job_id, patience=0):
+        """Отметка хода экспорта из страницы: подготовка не зависла."""
+        export.note_progress(job_id, patience)
+
+    def cancel_export(self, job_id):
+        export.cancel(job_id)
+
+    def embed_estimate(self, hrefs):
+        from .images import embed_estimate
+        return embed_estimate(hrefs)
 
     # ===== Окно и ссылки =====
 
