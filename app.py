@@ -42,6 +42,24 @@ _VK_U = 0x55
 _VK_ZERO = (0x30, 0x60)       # 0 в основном ряду и на цифровой клавиатуре
 _VK_PLUS = (0xBB, 0x6B)       # =/+ в основном ряду и + на цифровой клавиатуре
 _VK_MINUS = (0xBD, 0x6D)      # - в основном ряду и на цифровой клавиатуре
+_VK_F5 = 0x74
+_VK_F12 = 0x7B
+_VK_R = 0x52
+_VK_P = 0x50
+_VK_DEVTOOLS = (0x49, 0x4A, 0x43)  # I, J, C
+
+
+def _is_blocked_browser_key(vk, ctrl, shift):
+    """Браузерные сочетания, которые debug включил, а программе они не нужны:
+    перезагрузка (F5, Ctrl+R), печать (Ctrl+P) и инструменты разработчика."""
+    if vk in (_VK_F5, _VK_F12):
+        return True
+    if not ctrl:
+        return False
+    # Ctrl+Shift+R — тоже перезагрузка, Ctrl+Shift+P — печать через системное окно
+    if vk in (_VK_R, _VK_P):
+        return True
+    return shift and vk in _VK_DEVTOOLS
 
 
 def _shortcut_script(vk, shift):
@@ -62,6 +80,7 @@ def _shortcut_script(vk, shift):
 def _hook_editor_shortcuts():
     # debug=True включает браузерные сочетания WebView: Ctrl+U открывает исходный код страницы,
     # Ctrl+плюс/минус/0 меняют масштаб. Перехватываем их до браузера и отдаём редактору.
+    # Перезагрузку, печать и инструменты разработчика просто глушим.
     # loaded срабатывает не в UI-потоке, а контроллер WebView2 можно трогать только оттуда.
     slot = state.active_slot()
     key = slot.id if slot is not None else id(state.window)
@@ -89,9 +108,15 @@ def _hook_editor_shortcuts():
                 if int(args.KeyEventKind) != 0:
                     return
                 mods = int(Control.ModifierKeys)
-                if not (mods & int(Keys.Control)) or (mods & int(Keys.Alt)):
+                vk = int(args.VirtualKey)
+                ctrl = bool(mods & int(Keys.Control))
+                shift = bool(mods & int(Keys.Shift))
+                if _is_blocked_browser_key(vk, ctrl, shift):
+                    args.Handled = True
                     return
-                script = _shortcut_script(int(args.VirtualKey), bool(mods & int(Keys.Shift)))
+                if not ctrl or (mods & int(Keys.Alt)):
+                    return
+                script = _shortcut_script(vk, shift)
                 if script is None:
                     return
                 args.Handled = True
