@@ -652,8 +652,38 @@ function rememberMermaid(el) {
   scaleDiagramSvg(el);
 }
 
-// onEach — после каждой готовой схемы (экспорт показывает по нему прогресс).
-function paintMermaid(nodes, onEach) {
+// Отдать ход странице: щелчки («Отмена») и перерисовка счётчика проходят
+// между тяжёлыми шагами. MessageChannel, а не setTimeout: скрытое окно
+// тормозит таймеры до секунды на каждый вызов.
+function yieldToPage() {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(null);
+  });
+}
+
+// Схемы по одной с передышкой между ними. Одним mermaid.run страница не отвечает,
+// пока не дорисует все. pace: { step — готова ещё одна, stopped — пора остановиться }.
+function runMermaidPaced(api, nodes, pace) {
+  const stopped = () => !!(pace.stopped && pace.stopped());
+  let chain = Promise.resolve();
+  nodes.forEach((el) => {
+    chain = chain.then(() => {
+      if (stopped()) return null;
+      return yieldToPage().then(() => {
+        if (stopped()) return null;
+        return Promise.resolve(api.run({ nodes: [el] })).catch(() => { }).then(() => {
+          if (pace.step) pace.step();
+        });
+      });
+    });
+  });
+  return chain;
+}
+
+// pace — только для экспорта: схемы по одной, с прогрессом и отменой.
+function paintMermaid(nodes, pace) {
   if (!nodes.length) return Promise.resolve();
   const generation = diagramGeneration;
   return ensureMermaid().then((api) => {
@@ -666,7 +696,7 @@ function paintMermaid(nodes, onEach) {
       if (cached !== undefined) {
         el.innerHTML = cached;
         scaleDiagramSvg(el);
-        if (onEach) onEach();
+        if (pace && pace.step) pace.step();
         return;
       }
       if (el.querySelector("svg") && el.dataset.code) {
@@ -675,9 +705,8 @@ function paintMermaid(nodes, onEach) {
       fresh.push(el);
     });
     if (!fresh.length || !api) return;
-    const options = { nodes: fresh };
-    if (onEach) options.postRenderCallback = () => onEach();
-    return Promise.resolve(api.run(options)).catch(() => { }).then(() => {
+    const run = pace ? runMermaidPaced(api, fresh, pace) : Promise.resolve(api.run({ nodes: fresh }));
+    return run.catch(() => { }).then(() => {
       if (generation !== diagramGeneration) {
         fresh.forEach((el) => {
           if (el.isConnected) enqueueDiagram(el);
@@ -685,9 +714,18 @@ function paintMermaid(nodes, onEach) {
         pumpDiagrams();
         return;
       }
+      let left = false;
       fresh.forEach((el) => {
-        if (el.isConnected) rememberMermaid(el);
+        if (!el.isConnected) return;
+        if (el.querySelector("svg")) {
+          rememberMermaid(el);
+        } else if (pace) {
+          // Экспорт отменили посреди схем: остальные дорисует обычная очередь превью.
+          enqueueDiagram(el);
+          left = true;
+        }
       });
+      if (left) pumpDiagrams();
     });
   }).catch(() => { });
 }
@@ -2313,7 +2351,21 @@ function exportMarkup() {
 }
 
 // Дорисовать все схемы превью, включая те, что ещё стоят в очереди за экраном.
-function paintAllPreviewDiagrams(progress) {
+// Nomnoml рисуется быстро, но тоже по одной с передышкой: иначе «Отмена» ждёт все.
+function paintNomnomlPaced(nodes, paint, pace) {
+  let chain = Promise.resolve();
+  nodes.forEach((el) => {
+    chain = chain.then(() => {
+      if (pace.stopped && pace.stopped()) return null;
+      return yieldToPage().then(() => paint(el)).then(() => {
+        if (pace.step) pace.step();
+      });
+    });
+  });
+  return chain;
+}
+
+function paintAllPreviewDiagrams(progress, stopped) {
   const preview = document.getElementById("preview");
   if (!preview) return Promise.resolve();
   const mermaids = [];
@@ -2327,10 +2379,9 @@ function paintAllPreviewDiagrams(progress) {
       diagramQueue.splice(i, 1);
     }
   }
-  const step = progress ? progress(mermaids.length + nomnomls.length) : null;
-  return paintMermaid(mermaids, step).then(() => Promise.all(nomnomls.map((el) =>
-    paintNomnoml(el).then(() => { if (step) step(); })
-  )));
+  if (!progress) return paintMermaid(mermaids).then(() => Promise.all(nomnomls.map(paintNomnoml)));
+  const pace = { step: progress(mermaids.length + nomnomls.length), stopped: stopped };
+  return paintMermaid(mermaids, pace).then(() => paintNomnomlPaced(nomnomls, paintNomnoml, pace));
 }
 
 // После перестройки превью новые графики без canvas дорисовать самим.
@@ -2390,7 +2441,7 @@ function restoreMermaidTheme() {
 }
 
 // Схемы для файла в теме, отличной от редактора. Превью в это время не трогаем.
-function paintExportMermaid(nodes, theme, onEach) {
+function paintExportMermaid(nodes, theme, pace) {
   if (!nodes.length) return Promise.resolve();
   nodes.forEach((el, i) => {
     el.id = "mdv-export-mermaid-" + i;
@@ -2404,9 +2455,8 @@ function paintExportMermaid(nodes, theme, onEach) {
   return loadScript("lib/mermaid.min.js").then(() => {
     window.mermaid.initialize(mermaidThemes[theme] || mermaidThemes.light);
     mermaidThemeApplied = theme;
-    const options = { nodes };
-    if (onEach) options.postRenderCallback = () => onEach();
-    return Promise.resolve(window.mermaid.run(options)).catch(() => { });
+    const run = pace ? runMermaidPaced(window.mermaid, nodes, pace) : Promise.resolve(window.mermaid.run({ nodes }));
+    return run.catch(() => { });
   }).then(() => {
     nodes.forEach((el) => {
       if (el.querySelector("svg")) scaleDiagramSvg(el);
@@ -2422,9 +2472,10 @@ function paintOtherTheme(host, name, job) {
   const mermaids = Array.from(host.querySelectorAll(".mermaid"));
   const nomnomls = Array.from(host.querySelectorAll(".nomnoml-diagram"));
   const total = mermaids.length + nomnomls.length;
-  const step = total ? exportCounter(job, "Рисуем схемы", total) : null;
-  return paintExportMermaid(mermaids, name, step).then(() =>
-    Promise.all(nomnomls.map((el) => paintExportNomnoml(el, name).then(() => { if (step) step(); })))
+  if (!total) return Promise.resolve();
+  const pace = { step: exportCounter(job, "Рисуем схемы", total), stopped: () => exportStopped(job) };
+  return paintExportMermaid(mermaids, name, pace).then(() =>
+    paintNomnomlPaced(nomnomls, (el) => paintExportNomnoml(el, name), pace)
   );
 }
 
@@ -2599,6 +2650,8 @@ window.cancelExport = function () {
   const job = exportJob;
   if (!job || job.cancelled) return;
   job.cancelled = true;
+  // Плашку убираем сразу: начатая схема ещё может дорисовываться долю секунды.
+  if (typeof window.hideExportBusy === "function") window.hideExportBusy();
   if (typeof window.callApi === "function") {
     Promise.resolve(window.callApi("cancel_export", job.id)).catch(() => {});
   }
@@ -2658,6 +2711,9 @@ function embedDocumentImages(job) {
         if (exportStopped(job)) return EXPORT_CANCELLED;
         if (!image.dest) return imageErrorMessage(image);
         if (map[image.dest]) {
+          // Повтор той же картинки — ещё одна копия в HTML.
+          total += map[image.dest].length;
+          if (total > EMBED_LIMIT_BYTES) return embedTooLarge(0);
           step();
           return null;
         }
@@ -2719,7 +2775,7 @@ function checkExportDiagrams(job) {
     chain = chain.then((failed) => {
       if (failed) return failed;
       if (exportStopped(job)) return EXPORT_CANCELLED;
-      return checkDiagram(block).then((problem) => {
+      return yieldToPage().then(() => checkDiagram(block)).then((problem) => {
         if (!problem) step();
         return problem;
       });
@@ -2935,7 +2991,10 @@ function paintExportBody(theme, embed, uriMap, job) {
           captureDiagrams = false;
         }
       }
-      return paintAllPreviewDiagrams((total) => total ? exportCounter(job, "Рисуем схемы", total) : null)
+      return paintAllPreviewDiagrams(
+        (total) => total ? exportCounter(job, "Рисуем схемы", total) : null,
+        () => exportStopped(job)
+      )
         .then(() => paintUnreadyCharts());
     }).then(() => copyPaintedDiagrams(host))
     : paintOtherTheme(host, name, job);

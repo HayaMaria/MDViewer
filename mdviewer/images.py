@@ -152,27 +152,34 @@ def embed_estimate(hrefs):
     """
     total = 0
     unknown = 0
-    seen = set()
+    # Каждая копия картинки встраивается в HTML заново, поэтому считаем все,
+    # а размер одного адреса узнаём один раз.
+    sizes = {}
     for href in hrefs or []:
         href = str(href or '').strip()
-        if not href or href in seen:
+        if not href:
             continue
-        seen.add(href)
-        if is_remote(href):
-            cached = _cached_remote(href)
-            if cached:
-                total += len(cached[1])
-            else:
-                unknown += 1
-            continue
-        path = local_path(href)
-        try:
-            size = os.path.getsize(path) if path else 0
-        except OSError:
-            size = 0
-        # base64 длиннее исходных байт на треть
-        total += (size + 2) // 3 * 4
+        if href not in sizes:
+            sizes[href] = _embedded_size(href)
+        if sizes[href] is None:
+            unknown += 1
+        else:
+            total += sizes[href]
     return {'bytes': total, 'unknown': unknown}
+
+
+def _embedded_size(href):
+    """Длина data URI для адреса. None — не скачано, размер неизвестен."""
+    if is_remote(href):
+        cached = _cached_remote(href)
+        return len(cached[1]) if cached else None
+    path = local_path(href)
+    try:
+        size = os.path.getsize(path) if path else 0
+    except OSError:
+        size = 0
+    # base64 длиннее исходных байт на треть
+    return (size + 2) // 3 * 4
 
 
 def resolve_image(href):

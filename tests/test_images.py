@@ -153,4 +153,5 @@ def test_embed_estimate(tmp_path):
     path = tmp_path / 'a.png'
     path.write_bytes(b'x' * 300)
     estimate = images.embed_estimate([str(path), str(path), 'https://example.com/a.png'])
-    assert estimate == {'bytes': 400, 'unknown': 1}
+    # Две копии одной картинки — две копии в HTML.
+    assert estimate == {'bytes': 800, 'unknown': 1}
