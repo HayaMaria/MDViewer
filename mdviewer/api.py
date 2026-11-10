@@ -201,6 +201,12 @@ class Api:
 
         return call
 
+    # ===== О программе =====
+
+    def app_version(self):
+        from . import VERSION
+        return VERSION
+
     # ===== Настройки =====
 
     def get_settings(self):

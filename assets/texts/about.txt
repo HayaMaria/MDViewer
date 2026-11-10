@@ -1,4 +1,4 @@
-MD Viewer v1.0
+MD Viewer v{version}
 
 Редактор Markdown с предпросмотром в реальном времени.
 

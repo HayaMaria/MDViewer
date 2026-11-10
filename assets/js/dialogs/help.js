@@ -1,7 +1,14 @@
 // ===== Справка: текст из assets/texts, заголовок — подпись пункта меню =====
 window.openHelp = function (fileName, menuItem) {
+  var version = callApi('app_version').catch(function () { return ''; });
   fetch('texts/' + fileName)
     .then(function (response) { return response.text(); })
+    .then(function (text) {
+      return version.then(function (v) {
+        // «{version}» в тексте — номер версии из mdviewer/__init__.py
+        return text.replace(/\{version\}/g, v || '?');
+      });
+    })
     .then(function (text) {
       document.getElementById('help-title').textContent = menuItem.textContent.trim();
       var body = document.getElementById('help-body');
