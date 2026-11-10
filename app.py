@@ -194,8 +194,8 @@ def _once(callback):
 
 
 def _alert_later(message):
-    # Не из обработчика loaded: alert держал бы страницу, пока она грузит сеанс.
-    state.window.evaluate_js(f'setTimeout(function () {{ alert({json.dumps(message)}); }}, 1500)')
+    # Не из обработчика loaded: сначала пусть страница загрузит сеанс.
+    state.window.evaluate_js(f'setTimeout(function () {{ showMessage({json.dumps(message)}, "warning"); }}, 1500)')
 
 
 def main():

@@ -113,5 +113,11 @@ def call_js(function, *args):
     return state.window.evaluate_js(f'{function}({params})')
 
 
-def alert(message):
-    call_js('alert', message)
+def alert(message, kind='error'):
+    """Сообщение Windows поверх текущего окна. kind: 'error', 'warning' или 'info'."""
+    from .win import messagebox
+    from .win.titlebar import _resolve_hwnd
+
+    window = getattr(state, 'window', None)
+    owner = _resolve_hwnd(window) if window is not None else None
+    messagebox.show(message, kind, owner)

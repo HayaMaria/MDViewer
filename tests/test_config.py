@@ -159,3 +159,7 @@ def test_add_user_word_no_duplicates():
 def test_add_bad_word_is_ignored():
     config.add_user_word('два слова')
     assert words() == []
+
+def test_font_size_is_remembered():
+    config.set_font_size(20)
+    assert config.ui_settings()['font_size'] == 20

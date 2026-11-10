@@ -124,7 +124,7 @@ def _open_paths(paths):
                 files.append(path)
         if not files:
             if folders:
-                alert('Перетащите файл, а не папку.')
+                alert('Перетащите файл, а не папку.', 'warning')
             elif paths:
                 alert('Не удалось открыть файл.')
             return

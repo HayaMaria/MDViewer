@@ -460,6 +460,10 @@ class Api:
         from .win.contextmenu import configure
         configure(bool(dark))
 
+    def show_message(self, message, kind='error'):
+        """Сообщение Windows с заголовком вместо alert() страницы."""
+        alert(str(message), kind if kind in ('error', 'warning', 'info') else 'error')
+
     def open_external(self, url):
         webbrowser.open(url)
 

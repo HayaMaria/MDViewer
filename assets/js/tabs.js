@@ -562,7 +562,7 @@
   function reloadTab(tab) {
     return callApi('reload_file', tab.path, !!tab.html).then(function (result) {
       if (!result || !result.ok) {
-        window.alert(result && result.message ? result.message : 'Не удалось загрузить новую версию файла.');
+        window.showMessage(result && result.message ? result.message : 'Не удалось загрузить новую версию файла.');
         return;
       }
       if (tabs[active] !== tab) return;
@@ -596,14 +596,14 @@
   function noteMissingFile(tab) {
     tab.missingNoted = true;
     if (tab.html) {
-      window.alert('HTML-файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
-        'Во вкладке остаётся последняя загруженная версия.');
+      window.showMessage('HTML-файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
+        'Во вкладке остаётся последняя загруженная версия.', 'warning');
       return;
     }
     if (window.markUnsaved) window.markUnsaved();
     persistActive();
-    window.alert('Файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
-      'Текст остаётся открытым. Сохраните его, чтобы не потерять.');
+    window.showMessage('Файл «' + tab.title + '» удалён или перемещён другой программой.\n\n' +
+      'Текст остаётся открытым. Сохраните его, чтобы не потерять.', 'warning');
   }
 
   function checkActiveFile() {

@@ -72,7 +72,7 @@ def export_html(theme='current', save_path='', embed_images=None):
     """
     if state.html_mode:
         call_js('hideExportBusy')
-        alert('Экспорт недоступен: HTML-файл открыт в режиме только для чтения')
+        alert('Экспорт недоступен: HTML-файл открыт в режиме только для чтения', 'warning')
         return
     call_js('showExportBusy')
     try:

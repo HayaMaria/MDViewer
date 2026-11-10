@@ -20,7 +20,9 @@ def _win_error(code, cls=OSError):
     (_win_error(112), 'не хватает места'),
     (OSError(errno.ENOSPC, 'x'), 'не хватает места'),
     (_win_error(53), 'сетевая папка недоступна'),
-    (OSError(errno.EIO, 'Input/output error'), 'системная ошибка (Input/output error)'),
+    (OSError(errno.EIO, 'Input/output error'), 'системная ошибка (Input/output error)'), (IsADirectoryError(errno.EISDIR, 'x'), 'указана папка, а не файл'),
+    (OSError(errno.ENAMETOOLONG, 'x'), 'слишком длинный путь'),
+    (_win_error(21), 'диск недоступен'),
 ])
 def test_describe(error, expected):
     assert expected in errors.describe(error)

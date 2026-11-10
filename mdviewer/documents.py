@@ -224,7 +224,7 @@ def note_missing_session_file(data):
     if not missing or session.is_restorable(data):
         return
     session.clear_session()
-    alert('Файл из прошлого сеанса не найден:\n' + '\n'.join(missing))
+    alert('Файл из прошлого сеанса не найден:\n' + '\n'.join(missing), 'warning')
 
 
 def show_welcome():
@@ -528,7 +528,7 @@ def open_file_dialog():
 
 def save():
     if state.html_mode:
-        alert(READ_ONLY_MESSAGE)
+        alert(READ_ONLY_MESSAGE, 'warning')
         return False
     if state.current_file:
         return bool(_write_editor_content(state.current_file))
@@ -554,7 +554,7 @@ def _suggested_save_name():
 
 def save_as(initial_dir=''):
     if state.html_mode:
-        alert(READ_ONLY_MESSAGE)
+        alert(READ_ONLY_MESSAGE, 'warning')
         return False
     directory = initial_dir
     if not directory and state.current_file:

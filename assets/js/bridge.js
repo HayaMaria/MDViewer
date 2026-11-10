@@ -13,6 +13,19 @@
     return api ? api[method].apply(api, args) : Promise.resolve();
   };
 
+  // Сообщение Windows с заголовком «MD Viewer — Ошибка» вместо безымянного alert().
+  // kind: 'error' (по умолчанию), 'warning' или 'info'.
+  window.showMessage = function (message, kind) {
+    var api = readyApi();
+    if (!api || typeof api.show_message !== 'function') {
+      window.alert(message);
+      return Promise.resolve();
+    }
+    return Promise.resolve(api.show_message(String(message), kind || 'error')).catch(function () {
+      window.alert(message);
+    });
+  };
+
   window.onApiReady = function (callback) {
     if (readyApi()) callback();
     else window.addEventListener('pywebviewready', callback, { once: true });
