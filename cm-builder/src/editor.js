@@ -1032,6 +1032,8 @@ const customKeyBindings = [
   { key: "Mod-o", run: apiCommand("open_document") },
   { key: "Mod-s", run: apiCommand("save_document") },
   { key: "Mod-Shift-s", run: apiCommand("save_document_as") },
+  // Повтор: Ctrl+Y есть в historyKeymap, Ctrl+Shift+Z там только для macOS
+  { key: "Mod-Shift-z", run: redo, preventDefault: true },
   // Форматирование: жирный, курсив, зачёркнутый, подчёркнутый, инлайн-код
   { key: "Mod-b", run: () => { window.toggleBold(); return true; } },
   { key: "Mod-i", run: () => { window.toggleItalic(); return true; } },
