@@ -84,7 +84,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Сохранить установщик в запуске
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: MDViewer-${{ env.VERSION }}-setup
           path: dist/MDViewer-${{ env.VERSION }}-setup.exe
