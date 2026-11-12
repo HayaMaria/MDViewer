@@ -1,0 +1,99 @@
+# Сборка установщика MD Viewer на серверах GitHub.
+#
+# Запуск:
+#   - тег vX.Y (git tag v1.0 && git push origin v1.0) — сборка + черновик релиза
+#     с установщиком на странице Releases. Опубликовать черновик — вручную;
+#   - вкладка Actions → «Сборка установщика» → Run workflow — пробная сборка
+#     без релиза, установщик скачивается со страницы запуска (Artifacts).
+#
+# Повторяет build.bat, но без pause и со своим загрузчиком PyInstaller,
+# собранным прямо здесь (C++ Build Tools на серверах GitHub уже есть).
+
+name: Сборка установщика
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          architecture: x64
+
+      - name: Номер версии
+        run: |
+          $version = python -c "import mdviewer; print(mdviewer.VERSION)"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            Write-Error "Тег $env:GITHUB_REF_NAME не совпадает с версией в mdviewer/__init__.py ($version). Ожидался тег v$version."
+            exit 1
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Сборка MD Viewer $version"
+
+      - name: Зависимости
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Свой загрузчик PyInstaller
+        # То же, что tools\build_bootloader.bat: стандартный загрузчик из pip
+        # одинаковый у всех, и антивирусы чаще ругаются на exe с ним
+        env:
+          PYINSTALLER_COMPILE_BOOTLOADER: '1'
+        run: |
+          $pyi = (Select-String -Path requirements-dev.txt -Pattern '^pyinstaller==(.+)$').Matches[0].Groups[1].Value
+          python -m pip install --force-reinstall --no-deps --no-cache-dir --no-binary pyinstaller "pyinstaller==$pyi"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Тесты
+        run: python -m pytest
+
+      - name: Программа (PyInstaller)
+        run: python -m PyInstaller --noconfirm MDViewer.spec
+
+      - name: Установщик WebView2
+        run: |
+          $wv2 = 'installer\redist\MicrosoftEdgeWebview2Setup.exe'
+          New-Item -ItemType Directory -Force installer\redist | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $wv2
+          $s = Get-AuthenticodeSignature $wv2
+          if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            Write-Error "У $wv2 нет действительной подписи Microsoft"
+            exit 1
+          }
+
+      - name: Установщик MD Viewer (Inno Setup)
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          & $iscc /Q "/DAppVersion=$env:VERSION" installer\MDViewer.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Сохранить установщик в запуске
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDViewer-${{ env.VERSION }}-setup
+          path: dist/MDViewer-${{ env.VERSION }}-setup.exe
+          if-no-files-found: error
+
+      - name: Черновик релиза
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "dist\MDViewer-$env:VERSION-setup.exe" `
+            --draft --title "MD Viewer $env:VERSION" --generate-notes
